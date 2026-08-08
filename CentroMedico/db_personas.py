@@ -20,7 +20,7 @@ import pyodbc
 # abre con la sesion de Windows actual, no con usuario/clave de SQL
 # Server. Esto coincide con como te conectas en SSMS.
 # ------------------------------------------------------------------
-SERVER = "localhost"                 # o el nombre de tu instancia, ej. "localhost\\SQLEXPRESS"
+SERVER = "KOBIN\SQLEXPRESS"                 # o el nombre de tu instancia, ej. "localhost\\SQLEXPRESS"
 DATABASE = "Centro_Medico"
 DRIVER = "{ODBC Driver 18 for SQL Server}"
 TRUST_CERT = "yes"                   # "yes" para desarrollo/local
