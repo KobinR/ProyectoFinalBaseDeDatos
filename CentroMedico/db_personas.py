@@ -8,6 +8,9 @@ Flujo de autenticacion:
    (TR_Persona_Insert/Update/Delete) lo capturen automaticamente.
 3. La conexion resultante se reutiliza durante toda la sesion
    de la app (app de un solo usuario a la vez). prueba
+
+
+   esto es una prueba para ver si sirve
 """
 
 import pyodbc
