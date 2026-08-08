@@ -2,7 +2,7 @@
 
 
 
-----------------------Este es el query para la base de datos--------------------------
+----------------------Este es el query para la base de datos  prueba--------------------------
 
 /*
 Aca procederemos a colocar todo lo que corresponde a la generacion de informacion para la base de datos. A continuacion, para llenar tablas:
