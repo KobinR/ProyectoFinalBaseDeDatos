@@ -2,6 +2,10 @@
 
  /* 1. tipo de tabla 'TVP'     disque para permitir poner varias cosas en lo de valor nuevo/viejo pero con lo de python       drop type TipoAuditoria;*/ 
 
+ /*App < Trigger < tvp < SP*/
+ /*el trigger detecta el evento, manda la info al tvp 'tipoauditoria' para permitir que muestren varios datos por medio de @Aud*/
+ /*el sp recibe el @Aud lleno y lo guarda en @registros*/
+
 create type TipoAuditoria as table
 (
     ID_USUARIO         int           null,
