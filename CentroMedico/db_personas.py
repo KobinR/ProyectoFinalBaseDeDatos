@@ -7,7 +7,7 @@ Flujo de autenticacion:
    sp_set_session_context, para que los triggers de auditoria
    (TR_Persona_Insert/Update/Delete) lo capturen automaticamente.
 3. La conexion resultante se reutiliza durante toda la sesion
-   de la app (app de un solo usuario a la vez).
+   de la app (app de un solo usuario a la vez). prueba
 """
 
 import pyodbc
