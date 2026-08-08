@@ -10,7 +10,6 @@ Flujo de autenticacion:
    de la app (app de un solo usuario a la vez). prueba
 
 
-   esto es una prueba para ver si sirve
 """
 
 import pyodbc
@@ -23,13 +22,13 @@ import pyodbc
 # abre con la sesion de Windows actual, no con usuario/clave de SQL
 # Server. Esto coincide con como te conectas en SSMS.
 # ------------------------------------------------------------------
-SERVER = "KOBIN\SQLEXPRESS"                 # o el nombre de tu instancia, ej. "localhost\\SQLEXPRESS"
+SERVER = "KOBIN\SQLEXPRESS"                 # cambiar segun donde estemos conectando la base de datos
 DATABASE = "Centro_Medico"
 DRIVER = "{ODBC Driver 18 for SQL Server}"
 TRUST_CERT = "yes"                   # "yes" para desarrollo/local
 
 
-def _connection_string() -> str:
+def _connection_string() -> str: #metodo de conexion necesaria con obdc
     return (
         f"DRIVER={DRIVER};"
         f"SERVER={SERVER};"
@@ -39,15 +38,13 @@ def _connection_string() -> str:
     )
 
 
-def get_raw_connection() -> pyodbc.Connection:
-    """Abre una conexion nueva con la cuenta de servicio."""
+def get_raw_connection() -> pyodbc.Connection: #Abre una conexion nueva con la cuenta de servicio.
     return pyodbc.connect(_connection_string())
-
 
 # ------------------------------------------------------------------
 # Autenticacion
 # ------------------------------------------------------------------
-def login(usuario: str, clave: str):
+def login(usuario: str, clave: str): #usado para el log in del inicio, comprueba las credenciales
     """
     Valida credenciales contra USUARIO y deja la conexion lista
     con ID_USUARIO propagado a SESSION_CONTEXT.
@@ -61,7 +58,7 @@ def login(usuario: str, clave: str):
     cursor.execute(
         """
         SELECT u.ID_USUARIO, u.CLAVE_ACCESO, u.ESTADO,
-               p.NOMBRE, p.PRIMER_APELLIDO
+        p.NOMBRE, p.PRIMER_APELLIDO
         FROM USUARIO u
         INNER JOIN EMPLEADO e ON e.ID_EMPLEADO = u.ID_EMPLEADO
         INNER JOIN PERSONA p ON p.ID_PERSONA = e.ID_PERSONA
@@ -71,22 +68,21 @@ def login(usuario: str, clave: str):
     )
     row = cursor.fetchone()
 
-    if row is None:
+    if row is None: #si el usuario no es valido o no lo encuentra
         conn.close()
         raise ValueError("Usuario no encontrado")
 
     id_usuario, clave_guardada, estado, nombre, apellido = row
 
-    if estado == 0:
+    if estado == 0: #usuario inactivo segun la tabla
         conn.close()
         raise ValueError("Usuario inactivo")
 
-    # TODO produccion: comparar hash (ej. bcrypt), no texto plano
-    if clave_guardada != clave:
+    if clave_guardada != clave: #clave
         conn.close()
         raise ValueError("Clave incorrecta")
 
-    cursor.execute(
+    cursor.execute( #
         "EXEC sp_set_session_context @key=N'ID_USUARIO', @value=?",
         id_usuario,
     )
@@ -96,7 +92,7 @@ def login(usuario: str, clave: str):
     )
     conn.commit()
 
-    return conn, id_usuario, f"{nombre} {apellido}"
+    return conn, id_usuario, f"{nombre} {apellido}" #usuario actual
 
 
 # ------------------------------------------------------------------
@@ -119,7 +115,7 @@ def listar_personas(conn: pyodbc.Connection, filtro: str = ""):
             SELECT {', '.join(COLUMNAS_PERSONA)}
             FROM PERSONA
             WHERE CEDULA LIKE ? OR NOMBRE LIKE ?
-               OR PRIMER_APELLIDO LIKE ? OR SEGUNDO_APELLIDO LIKE ?
+            OR PRIMER_APELLIDO LIKE ? OR SEGUNDO_APELLIDO LIKE ?
             ORDER BY ID_PERSONA
             """,
             (like, like, like, like),
@@ -136,8 +132,8 @@ def crear_persona(conn: pyodbc.Connection, data: dict) -> None:
     cursor.execute(
         """
         INSERT INTO PERSONA (CEDULA, NOMBRE, PRIMER_APELLIDO, SEGUNDO_APELLIDO,
-                              FECHA_NACIMIENTO, SEXO, TELEFONO, CORREO,
-                              DIRECCION, ESTADO)
+                                FECHA_NACIMIENTO, SEXO, TELEFONO, CORREO,
+                                DIRECCION, ESTADO)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
