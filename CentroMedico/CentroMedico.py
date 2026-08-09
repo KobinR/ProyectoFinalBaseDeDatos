@@ -65,9 +65,9 @@ class LoginWindow(tk.Tk):
 # MENU PRINCIPAL
 # ==========================================================
 # Cada entrada define el texto del boton y si ya tiene modulo
-MODULOS = [
+MODULOS = [ #cuando se termine cada uno se va agregando
     ("Personas", True),
-    ("Pacientes", False),
+    ("Pacientes", True),
     ("Expedientes", False),
     ("Empleados", False),
     ("Usuarios", False),
@@ -119,6 +119,8 @@ class MenuPrincipal(tk.Tk):
 
         if nombre == "Personas":
             VentanaPersonas(self, self.conn)
+        elif nombre == "Pacientes":
+            VentanaPacientes(self,self.conn)
 
     def _cerrar_app(self):
         if self.conn:
@@ -330,6 +332,235 @@ class VentanaPersonas(tk.Toplevel):
         self._limpiar_formulario()
         self.cargar_personas()
  
+# ==========================================================
+# CRUD PACIENTE
+# ==========================================================
+class VentanaPacientes(tk.Toplevel):
+    def __init__(self, parent, conn):
+        super().__init__(parent)
+        self.conn = conn
+        self.id_paciente_seleccionado = None
+        self.id_persona_enganchada = None
+ 
+        self.title("Gestion de Pacientes")
+        self.geometry("1000x560")
+ 
+        self._construir_barra_busqueda()
+        self._construir_tabla()
+        self._construir_formulario()
+        self._construir_botones()
+ 
+        self.cargar_pacientes()
+ 
+    # ---------------- UI ----------------
+    def _construir_barra_busqueda(self):
+        frame = ttk.Frame(self)
+        frame.pack(fill="x", padx=10, pady=(10, 0))
+ 
+        ttk.Label(frame, text="Buscar (cedula / nombre / apellido):").pack(side="left")
+        self.entry_buscar = ttk.Entry(frame, width=30)
+        self.entry_buscar.pack(side="left", padx=5)
+        self.entry_buscar.bind("<Return>", lambda e: self.cargar_pacientes())
+ 
+        ttk.Button(frame, text="Buscar", command=self.cargar_pacientes).pack(side="left", padx=5)
+        ttk.Button(frame, text="Mostrar todos", command=self._mostrar_todos).pack(side="left")
+ 
+    def _construir_tabla(self):
+        columnas = ("ID Paciente", "ID Persona", "Cedula", "Nombre", "Ap. Primero",
+                    "Tipo Sangre", "Seguro Medico", "Contacto", "Tel. Contacto",
+                    "Parentesco", "F. Registro")
+ 
+        self.tabla = ttk.Treeview(self, columns=columnas, show="headings", height=12)
+        for col in columnas:
+            self.tabla.heading(col, text=col)
+            self.tabla.column(col, width=90, anchor="w")
+        self.tabla.column("Seguro Medico", width=130)
+        self.tabla.column("Contacto", width=130)
+ 
+        self.tabla.pack(fill="both", expand=True, padx=10, pady=10)
+        self.tabla.bind("<<TreeviewSelect>>", self._al_seleccionar_fila)
+ 
+    def _construir_formulario(self):
+        # --- sub-frame: enganchar persona por cedula ---
+        frame_persona = ttk.LabelFrame(self, text="Persona asociada")
+        frame_persona.pack(fill="x", padx=10, pady=(0, 5))
+ 
+        ttk.Label(frame_persona, text="Cedula:").pack(side="left", padx=(5, 0))
+        self.entry_cedula_paciente = ttk.Entry(frame_persona, width=15)
+        self.entry_cedula_paciente.pack(side="left", padx=5)
+ 
+        ttk.Button(
+            frame_persona, text="Buscar persona", command=self._buscar_persona
+        ).pack(side="left", padx=5)
+ 
+        self.label_persona_enganchada = ttk.Label(frame_persona, text="(sin persona seleccionada)")
+        self.label_persona_enganchada.pack(side="left", padx=10)
+ 
+        
+        frame = ttk.LabelFrame(self, text="Datos del paciente")
+        frame.pack(fill="x", padx=10, pady=(0, 10))
+ 
+        self.vars = {
+            "tipo_sangre": tk.StringVar(),
+            "seguro_medico": tk.StringVar(),
+            "nombre_contacto": tk.StringVar(),
+            "telefono_contacto": tk.StringVar(),
+            "parentesco": tk.StringVar(),
+        }
+ 
+        campos = [
+            ("Tipo de sangre", "tipo_sangre"), ("Seguro medico", "seguro_medico"),
+            ("Nombre de contacto", "nombre_contacto"), ("Telefono de contacto", "telefono_contacto"),
+            ("Parentesco", "parentesco"),
+        ]
+ 
+        for idx, (etiqueta, clave) in enumerate(campos):
+            fila, columna = divmod(idx, 2)
+            ttk.Label(frame, text=etiqueta).grid(row=fila, column=columna * 2, sticky="e", padx=5, pady=4)
+            ttk.Entry(frame, textvariable=self.vars[clave], width=28).grid(
+                row=fila, column=columna * 2 + 1, sticky="w", padx=5, pady=4
+            )
+ 
+    def _construir_botones(self):
+        frame = ttk.Frame(self)
+        frame.pack(fill="x", padx=10, pady=(0, 10))
+ 
+        ttk.Button(frame, text="Nuevo", command=self._limpiar_formulario).pack(side="left", padx=5)
+        ttk.Button(frame, text="Guardar", command=self._guardar).pack(side="left", padx=5)
+        ttk.Button(frame, text="Eliminar", command=self._eliminar).pack(side="left", padx=5)
+        ttk.Button(frame, text="Cerrar", command=self.destroy).pack(side="right", padx=5)
+ 
+    # ---------------- Logica ----------------
+    def cargar_pacientes(self):
+        filtro = self.entry_buscar.get().strip()
+        try:
+            filas = db.listar_pacientes(self.conn, filtro)
+        except pyodbc.Error as e:
+            messagebox.showerror("Error", f"No se pudo consultar PACIENTE.\n\n{e}")
+            return
+ 
+        self.tabla.delete(*self.tabla.get_children())
+        for fila in filas:
+            self.tabla.insert("", "end", values=list(fila))
+ 
+    def _mostrar_todos(self):
+        self.entry_buscar.delete(0, "end")
+        self.cargar_pacientes()
+ 
+    def _buscar_persona(self):
+        cedula = self.entry_cedula_paciente.get().strip()
+        if not cedula:
+            messagebox.showwarning("Falta cedula", "Escribe una cedula para buscar.")
+            return
+ 
+        try:
+            persona = db.buscar_persona_por_cedula(self.conn, cedula)
+        except pyodbc.Error as e:
+            messagebox.showerror("Error", f"No se pudo buscar la persona.\n\n{e}")
+            return
+ 
+        if persona is None:
+            messagebox.showwarning("No encontrada", "No existe una persona con esa cedula.")
+            self.id_persona_enganchada = None
+            self.label_persona_enganchada.config(text="(sin persona seleccionada)")
+            return
+ 
+        id_persona, nombre, primer_apellido = persona
+        self.id_persona_enganchada = id_persona
+        self.label_persona_enganchada.config(text=f"{nombre} {primer_apellido} (ID {id_persona})")
+ 
+    def _al_seleccionar_fila(self, event):
+        seleccion = self.tabla.selection()
+        if not seleccion:
+            return
+        valores = self.tabla.item(seleccion[0], "values")
+ 
+        self.id_paciente_seleccionado = int(valores[0])
+        self.id_persona_enganchada = int(valores[1])
+        self.label_persona_enganchada.config(text=f"{valores[3]} {valores[4]} (ID {valores[1]})")
+        self.entry_cedula_paciente.delete(0, "end")
+        self.entry_cedula_paciente.insert(0, valores[2])
+ 
+        self.vars["tipo_sangre"].set(valores[5] if valores[5] != "None" else "")
+        self.vars["seguro_medico"].set(valores[6] if valores[6] != "None" else "")
+        self.vars["nombre_contacto"].set(valores[7] if valores[7] != "None" else "")
+        self.vars["telefono_contacto"].set(valores[8] if valores[8] != "None" else "")
+        self.vars["parentesco"].set(valores[9] if valores[9] != "None" else "")
+ 
+    def _limpiar_formulario(self):
+        self.id_paciente_seleccionado = None
+        self.id_persona_enganchada = None
+        self.label_persona_enganchada.config(text="(sin persona seleccionada)")
+        self.entry_cedula_paciente.delete(0, "end")
+        for var in self.vars.values():
+            var.set("")
+        self.tabla.selection_remove(self.tabla.selection())
+ 
+    def _leer_formulario(self) -> dict:
+        return {
+            "id_persona": self.id_persona_enganchada,
+            "tipo_sangre": self.vars["tipo_sangre"].get().strip(),
+            "seguro_medico": self.vars["seguro_medico"].get().strip(),
+            "nombre_contacto": self.vars["nombre_contacto"].get().strip(),
+            "telefono_contacto": self.vars["telefono_contacto"].get().strip(),
+            "parentesco": self.vars["parentesco"].get().strip(),
+        }
+ 
+    def _validar(self, data: dict) -> bool:
+        # Solo se exige la persona enganchada al CREAR; al editar, la
+        # persona ya viene fija desde la fila seleccionada.
+        if self.id_paciente_seleccionado is None and data["id_persona"] is None:
+            messagebox.showwarning(
+                "Falta persona", "Busca y selecciona una persona por cedula antes de guardar."
+            )
+            return False
+        return True
+ 
+    def _guardar(self):
+        data = self._leer_formulario()
+        if not self._validar(data):
+            return
+ 
+        try:
+            if self.id_paciente_seleccionado is None:
+                db.crear_paciente(self.conn, data)
+                messagebox.showinfo("Exito", "Paciente creado correctamente.")
+            else:
+                db.actualizar_paciente(self.conn, self.id_paciente_seleccionado, data)
+                messagebox.showinfo("Exito", "Paciente actualizado correctamente.")
+        except pyodbc.Error as e:
+            messagebox.showerror("Error al guardar", str(e))
+            return
+ 
+        self._limpiar_formulario()
+        self.cargar_pacientes()
+ 
+    def _eliminar(self):
+        if self.id_paciente_seleccionado is None:
+            messagebox.showwarning("Sin seleccion", "Selecciona un paciente de la tabla primero.")
+            return
+ 
+        confirmar = messagebox.askyesno(
+            "Confirmar", "¿Seguro que deseas eliminar este paciente? Esta accion no se puede deshacer."
+        )
+        if not confirmar:
+            return
+ 
+        try:
+            db.eliminar_paciente(self.conn, self.id_paciente_seleccionado)
+            messagebox.showinfo("Exito", "Paciente eliminado.")
+        except pyodbc.Error as e:
+            messagebox.showerror(
+                "Error al eliminar",
+                f"No se pudo eliminar (puede tener registros relacionados, ej. EXPEDIENTE/CONSULTA).\n\n{e}",
+            )
+            return
+ 
+        self._limpiar_formulario()
+        self.cargar_pacientes()
+
+
+
  
 # ==========================================================
 # PUNTO DE ENTRADA

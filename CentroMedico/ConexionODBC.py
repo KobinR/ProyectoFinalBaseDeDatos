@@ -22,7 +22,7 @@ import pyodbc
 # abre con la sesion de Windows actual, no con usuario/clave de SQL
 # Server. Esto coincide con como te conectas en SSMS.
 # ------------------------------------------------------------------
-SERVER = "KOBIN\SQLEXPRESS"                 # cambiar segun donde estemos conectando la base de datos
+SERVER = r"KOBIN\SQLEXPRESS"                 # cambiar segun donde estemos conectando la base de datos
 DATABASE = "Centro_Medico"
 DRIVER = "{ODBC Driver 18 for SQL Server}"
 TRUST_CERT = "yes"                   # "yes" para desarrollo/local
@@ -170,3 +170,91 @@ def eliminar_persona(conn: pyodbc.Connection, id_persona: int) -> None:
     cursor = conn.cursor()
     cursor.execute("DELETE FROM PERSONA WHERE ID_PERSONA = ?", id_persona)
     conn.commit()
+
+# ------------------------------------------------------------------
+# CRUD - PACIENTE
+# ------------------------------------------------------------------
+# PACIENTE depende de PERSONA, listar_pacientes trae tambien cedula/nombre via JOIN y y para
+# crear un paciente nuevo primero se busca la persona con buscar_persona_por_cedula().
+
+COLUMNAS_PACIENTE = [
+    "p.ID_PACIENTE", "p.ID_PERSONA", "per.CEDULA", "per.NOMBRE", "per.PRIMER_APELLIDO",
+    "p.TIPO_SANGRE", "p.SEGURO_MEDICO", "p.NOMBRE_CONTACTO",
+    "p.TELEFONO_CONTACTO", "p.PARENTESCO", "p.FECHA_REGISTRO",
+]
+
+def buscar_persona_por_cedula(conn: pyodbc.Connection, cedula: str):
+    """Devuelve (ID_PERSONA, NOMBRE, PRIMER_APELLIDO) o None si no existe."""
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT ID_PERSONA, NOMBRE, PRIMER_APELLIDO FROM PERSONA WHERE CEDULA = ?",
+        cedula,
+    )
+    return cursor.fetchone()
+
+def listar_pacientes(conn: pyodbc.Connection, filtro: str = ""):
+    """Devuelve todos los pacientes con datos de PERSONA via JOIN,
+    opcionalmente filtrados por cedula, nombre o apellido."""
+    cursor = conn.cursor()
+    if filtro:
+        like = f"%{filtro}%"
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_PACIENTE)}
+            FROM PACIENTE p
+            INNER JOIN PERSONA per ON per.ID_PERSONA = p.ID_PERSONA
+            WHERE per.CEDULA LIKE ? OR per.NOMBRE LIKE ? OR per.PRIMER_APELLIDO LIKE ?
+            ORDER BY p.ID_PACIENTE
+            """,
+            (like, like, like),
+        )
+    else:
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_PACIENTE)}
+            FROM PACIENTE p
+            INNER JOIN PERSONA per ON per.ID_PERSONA = p.ID_PERSONA
+            ORDER BY p.ID_PACIENTE
+            """
+        )
+    return cursor.fetchall()
+
+def crear_paciente(conn: pyodbc.Connection, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO PACIENTE (ID_PERSONA, TIPO_SANGRE, SEGURO_MEDICO,
+                                NOMBRE_CONTACTO, TELEFONO_CONTACTO, PARENTESCO,
+                                FECHA_REGISTRO)
+        VALUES (?, ?, ?, ?, ?, ?, GETDATE())
+        """,
+        (
+            data["id_persona"], data["tipo_sangre"] or None, data["seguro_medico"] or None,
+            data["nombre_contacto"] or None, data["telefono_contacto"] or None,
+            data["parentesco"] or None,
+        ),
+    )
+    conn.commit()
+
+def actualizar_paciente(conn: pyodbc.Connection, id_paciente: int, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE PACIENTE
+        SET TIPO_SANGRE = ?, SEGURO_MEDICO = ?, NOMBRE_CONTACTO = ?,
+            TELEFONO_CONTACTO = ?, PARENTESCO = ?
+        WHERE ID_PACIENTE = ?
+        """,
+        (
+            data["tipo_sangre"] or None, data["seguro_medico"] or None,
+            data["nombre_contacto"] or None, data["telefono_contacto"] or None,
+            data["parentesco"] or None, id_paciente,
+        ),
+    )
+    conn.commit()
+
+def eliminar_paciente(conn: pyodbc.Connection, id_paciente: int) -> None:
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM PACIENTE WHERE ID_PACIENTE = ?", id_paciente)
+    conn.commit()
+
