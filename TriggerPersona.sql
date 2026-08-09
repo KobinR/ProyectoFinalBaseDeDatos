@@ -20,7 +20,7 @@ go
 
 /*2. Procedimiento almacenado*/ 
 
-Create Procedure SP_RegistrarAuditoria
+Create Procedure SP_RegistrarAuditoria /*Sp para no repetir codigo en los triggers*/
     @Registros TipoAuditoria readonly
 as
 begin
@@ -39,8 +39,85 @@ begin
     from @Registros;
 end;
 go
+/*-----------------------------------------------*/
 
+alter procedure SP_BuscarPersona /*Buscador de personas*/
+    @filtro varchar(100)
+as
+begin
 
+    select ID_PERSONA, CEDULA, NOMBRE, PRIMER_APELLIDO, SEGUNDO_APELLIDO, FECHA_NACIMIENTO, SEXO, TELEFONO, CORREO, DIRECCION, ESTADO
+    from PERSONA
+    where @filtro is null or CEDULA like '%' + @filtro + '%' or /**/
+    NOMBRE like '%' + @filtro + '%' or
+    PRIMER_APELLIDO like '%' + @filtro + '%' or
+    SEGUNDO_APELLIDO like '%' + @filtro + '%'
+
+order by ID_PERSONA desc;
+end;
+
+EXEC SP_BuscarPersona @filtro = 'Esteban';
+
+/*-----------------------------------------------*/
+
+Alter procedure SP_HistorialPaciente
+    @Cedula varchar(20)
+ as 
+ begin
+    select c.ID_CONSULTA, c.FECHA, c.MOTIVO, c.DIAGNOSTICO, c.TRATAMIENTO, c.OBSERVACIONES,pm.NOMBRE+ ' '+ pm.PRIMER_APELLIDO as Medico, m.ESPECIALIDAD
+    from PERSONA p
+    inner join PACIENTE pac on pac.ID_PERSONA = p.ID_PERSONA
+    inner join EXPEDIENTE e on e.ID_PACIENTE = pac.ID_PACIENTE
+    inner join CONSULTA c on c.ID_EXPEDIENTE = e.ID_EXPEDIENTE
+    inner join MEDICO m on m.ID_MEDICO = c.ID_MEDICO
+    inner join EMPLEADO emp on emp.ID_EMPLEADO = m.ID_EMPLEADO
+    inner join PERSONA pm on pm.ID_PERSONA = emp.ID_PERSONA
+    where p.CEDULA = @Cedula
+    order by c.FECHA desc
+end
+
+exec SP_HistorialPaciente @cedula = '5-3242-5572'
+
+/*-------------------------------*/
+select * from CONSULTA
+select * from MEDICO
+select * from EXPEDIENTE
+select * from PACIENTE
+create procedure SP_ConsultasMedico /*las fechas pueden estar vacias para tomar todas las consultas del medico*/
+@IDMedico int,
+@fechaInicio date = null,
+@fechaFin date = null
+as
+begin
+
+    select c.ID_CONSULTA, c.FECHA, c.MOTIVO, c.DIAGNOSTICO, p.NOMBRE+ e.OBSERVACIONES + ' '+ p.PRIMER_APELLIDO as paciente
+    from CONSULTA c
+    inner join EXPEDIENTE e on e.ID_EXPEDIENTE = c.ID_EXPEDIENTE
+    inner join PACIENTE pac on pac.ID_PACIENTE = e.ID_PACIENTE
+    inner join PERSONA p    on p.ID_PERSONA    = pac.ID_PERSONA
+    where c.ID_MEDICO = @IDMedico
+      and (@fechaInicio is null or c.FECHA >= @fechaInicio)
+      and (@fechaFin    is null or c.FECHA <= @fechaFin)
+    order by c.FECHA desc;
+end;
+
+/*-----------------------------------------*/
+
+select * from MEDICAMENTO
+select * from INVENTARIO
+
+alter procedure SP_MedicamentosPorVencer 
+    @DiasLimite int
+as
+begin
+    select i.ID_INVENTARIO, m.NOMBRE, i.LOTE, i.FECHA_VENCIMIENTO, i.CANTIDAD, DATEDIFF(DAY, GETDATE(), i.FECHA_VENCIMIENTO) AS DiasParaVencer
+    from INVENTARIO i
+    inner join MEDICAMENTO m on m.ID_MEDICAMENTO = i.ID_MEDICAMENTO
+    where i.FECHA_VENCIMIENTO <= DATEADD(DAY, @DiasLimite, GETDATE())
+    order by i.FECHA_VENCIMIENTO asc;
+end;
+
+exec SP_MedicamentosPorVencer
 
 /* 3. Triggers
 
@@ -58,6 +135,8 @@ end;
 go
 
 Select * from PERSONA
+select * from MEDICAMENTO
+select * from DETALLE_RECETA
 select * from USUARIO
 select * from AUDITORIA
 go
