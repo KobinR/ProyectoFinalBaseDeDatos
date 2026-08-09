@@ -1,1 +1,213 @@
 --insert delete
+
+USE Centro_Medico;
+GO
+
+-- Inserts de datos
+
+INSERT INTO MEDICAMENTO
+(
+NOMBRE,
+DESCRIPCION,
+PRESENTACION,
+CONCENTRACION,
+PRECIO,
+FABRICANTE,
+REQUIERE_RECETA,
+ESTADO
+)
+VALUES
+(
+'Naproxeno',
+'Antiinflamatorio y analgesico',
+'Tabletas',
+'250 mg',
+2100.00,
+'Laboratorios Nacionales',
+0,
+1
+);
+GO
+
+INSERT INTO MEDICAMENTO
+(
+NOMBRE,
+DESCRIPCION,
+PRESENTACION,
+CONCENTRACION,
+PRECIO,
+FABRICANTE,
+REQUIERE_RECETA,
+ESTADO
+)
+VALUES
+(
+'Diclofenaco',
+'Antiinflamatorio para dolor muscular',
+'Tabletas',
+'50 mg',
+1900.00,
+'Farmaceutica Central',
+0,
+1
+);
+GO
+
+INSERT INTO MEDICAMENTO
+(
+NOMBRE,
+DESCRIPCION,
+PRESENTACION,
+CONCENTRACION,
+PRECIO,
+FABRICANTE,
+REQUIERE_RECETA,
+ESTADO
+)
+VALUES
+(
+'Cetirizina',
+'Antihistaminico para alergias',
+'Tabletas',
+'10 mg',
+1700.00,
+'Laboratorios Vida',
+0,
+1
+);
+GO
+
+INSERT INTO MEDICAMENTO
+(
+NOMBRE,
+DESCRIPCION,
+PRESENTACION,
+CONCENTRACION,
+PRECIO,
+FABRICANTE,
+REQUIERE_RECETA,
+ESTADO
+)
+VALUES
+(
+'Azitromicina',
+'Antibiotico para infecciones bacterianas',
+'Tabletas',
+'500 mg',
+4200.00,
+'Laboratorios San Jose',
+1,
+1
+);
+GO
+
+INSERT INTO MEDICAMENTO
+(
+NOMBRE,
+DESCRIPCION,
+PRESENTACION,
+CONCENTRACION,
+PRECIO,
+FABRICANTE,
+REQUIERE_RECETA,
+ESTADO
+)
+VALUES
+(
+'Pantoprazol',
+'Protector gastrico para acidez y reflujo',
+'Tabletas',
+'40 mg',
+2900.00,
+'Laboratorios Medix',
+0,
+1
+);
+GO
+
+-- Updates --
+
+UPDATE MEDICAMENTO
+SET PRECIO = 2300.00
+WHERE NOMBRE = 'Naproxeno';
+GO
+
+UPDATE MEDICAMENTO
+SET DESCRIPCION = 'Antiinflamatorio para dolor y fiebre'
+WHERE NOMBRE = 'Diclofenaco';
+GO
+
+UPDATE MEDICAMENTO
+SET PRESENTACION = 'Jarabe'
+WHERE NOMBRE = 'Cetirizina';
+GO
+
+UPDATE MEDICAMENTO
+SET PRECIO = 4500.00
+WHERE NOMBRE = 'Azitromicina';
+GO
+
+UPDATE MEDICAMENTO
+SET ESTADO = 0
+WHERE NOMBRE = 'Pantoprazol';
+GO
+
+UPDATE MEDICAMENTO
+SET ESTADO = 1
+WHERE NOMBRE = 'Pantoprazol';
+GO
+
+-- select para ver que los cambios se hicieron
+
+SELECT *
+FROM MEDICAMENTO
+WHERE NOMBRE IN
+(
+'Naproxeno',
+'Diclofenaco',
+'Cetirizina',
+'Azitromicina',
+'Pantoprazol'
+);
+GO
+
+-- DELETE
+
+DELETE FROM MEDICAMENTO
+WHERE NOMBRE = 'Naproxeno';
+GO
+
+DELETE FROM MEDICAMENTO
+WHERE NOMBRE = 'Diclofenaco';
+GO
+
+DELETE FROM MEDICAMENTO
+WHERE NOMBRE = 'Cetirizina';
+GO
+
+DELETE FROM MEDICAMENTO
+WHERE NOMBRE = 'Azitromicina';
+GO
+
+DELETE FROM MEDICAMENTO
+WHERE NOMBRE = 'Acetaminofen;
+GO
+
+-- Comprobar los datos
+
+SELECT *
+FROM MEDICAMENTO
+WHERE NOMBRE IN
+(
+'Naproxeno',
+'Diclofenaco',
+'Cetirizina',
+'Azitromicina',
+'Acetaminofen'
+);
+GO
+
+SELECT *
+FROM AUDITORIA
+ORDER BY ID_AUDITORIA DESC;
+GO
