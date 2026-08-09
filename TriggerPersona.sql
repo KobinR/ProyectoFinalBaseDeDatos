@@ -117,8 +117,89 @@ begin
     order by i.FECHA_VENCIMIENTO asc;
 end;
 
-exec SP_MedicamentosPorVencer
+exec SP_MedicamentosPorVencer @DiasLimite = 1000
+/*------------------------------------------------*/
+select * from PACIENTE
+Create procedure SP_PacientesPorSeguro
+    @SeguroMedico varchar(50)
+as
+begin
+    select p.ID_PERSONA, p.CEDULA, p.NOMBRE, p.PRIMER_APELLIDO, p.SEGUNDO_APELLIDO, pac.ID_PACIENTE, pac.SEGURO_MEDICO, pac.TIPO_SANGRE
+    from PACIENTE pac
+    inner join PERSONA p ON p.ID_PERSONA = pac.ID_PERSONA
+    where pac.SEGURO_MEDICO = @SeguroMedico
+    order by p.PRIMER_APELLIDO;
+end;
 
+exec SP_PacientesPorSeguro @SeguroMedico = 'CCSS'
+
+/*------------------------------------------------*/
+
+create procedure SP_ContarConsultaPorPaciente
+    @Cedula varchar(20)
+as
+begin
+    select p.CEDULA, p.NOMBRE, p.PRIMER_APELLIDO, COUNT(c.ID_CONSULTA) AS TotalConsultas
+    from PERSONA p
+    inner join PACIENTE pac on pac.ID_PERSONA  = p.ID_PERSONA
+    inner join EXPEDIENTE e on e.ID_PACIENTE   = pac.ID_PACIENTE
+    inner join CONSULTA c on c.ID_EXPEDIENTE = e.ID_EXPEDIENTE
+    where p.CEDULA = @Cedula
+    group by p.CEDULA, p.NOMBRE, p.PRIMER_APELLIDO;
+end;
+
+select * from PACIENTE
+select * from PERSONA
+
+/*------------------------------------------------*/
+
+alter procedure SP_CambiarEstadoPersona
+    @ID_Persona int,
+    @Estado     bit
+as
+begin
+    if SESSION_CONTEXT(N'ID_USUARIO') is null
+        exec sp_set_session_context @key = N'ID_USUARIO', @value = 1;
+    if not exists (select 1 from PERSONA where ID_PERSONA = @ID_Persona)
+    begin
+        RAISERROR('La persona indicada no existe.',16,1);
+        return;
+    end
+    update PERSONA set ESTADO = @Estado where ID_PERSONA = @ID_Persona;
+end
+/*------------------------------------------------*/
+alter procedure SP_CancelarReceta
+    @ID_Receta int
+as
+begin
+    if SESSION_CONTEXT(N'ID_USUARIO') is null
+        exec sp_set_session_context @key = N'ID_USUARIO', @value = 1;
+    if not exists (select 1 from RECETA where ID_RECETA = @ID_Receta and ESTADO = 'PENDIENTE') /*PENDIENTE*/
+    begin
+        RAISERROR('Solo se pueden cancelar recetas pendientes.', 16, 1);
+        return;
+    end
+ 
+    update RECETA set ESTADO = 'CANCELADA' where ID_RECETA = @ID_Receta; /*CANCELADA*/
+end
+
+select * from RECETA
+select * from DETALLE_RECETA
+
+select * from AUDITORIA
+/*------------------------------------------------*/
+alter procedure SP_UltimoAccesoUsuario
+    @Usuario varchar(50)
+as
+begin
+    select u.ID_USUARIO, u.USUARIO, u.ULTIMO_ACCESO, u.ESTADO,p.NOMBRE + ' ' + p.PRIMER_APELLIDO AS NombreEmpleado
+    from USUARIO u
+    inner join EMPLEADO e ON e.ID_EMPLEADO = u.ID_EMPLEADO
+    inner join PERSONA p    ON p.ID_PERSONA    = e.ID_PERSONA
+    where u.USUARIO = @Usuario
+    order by u.ULTIMO_ACCESO desc;
+end;
+select * from USUARIO
 /* 3. Triggers
 
 
