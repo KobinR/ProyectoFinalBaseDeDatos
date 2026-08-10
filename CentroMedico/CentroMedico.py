@@ -74,10 +74,10 @@ MODULOS = [ #cuando se termine cada uno se va agregando
     ("Medicos", True),
     ("Consultas", True),
     ("Recetas", True),
-    ("Detalle de receta", False),
+    ("Detalle de receta", True),
     ("Medicamentos", True),
-    ("Inventario", False),
-    ("Auditoria", False),
+    ("Inventario", True),
+    ("Auditoria", True),
 ]
 ESTADOS_LABORALES = ["Activo", "Inactivo", "Suspendido", "Vacaciones"]
 ESTADOS_RECETA = ["Pendiente", "Entregada", "Cancelada"]
@@ -137,6 +137,12 @@ class MenuPrincipal(tk.Tk):
             VentanaMedicamentos(self,self.conn)
         elif nombre == "Recetas":
             VentanaMedicamentos(self,self.conn)
+        elif nombre == "Detalle de receta":
+            VentanaDetalleRecetas(self,self.conn)
+        elif nombre == "Inventario":
+            VentanaInventario(self,self.conn)
+        elif nombre == "Auditoria":
+            VentanaAuditoria(self,self.conn)
 
     def _cerrar_app(self):
         if self.conn:
@@ -2237,9 +2243,709 @@ class VentanaRecetas(tk.Toplevel):
         self._limpiar_formulario()
         self.cargar_recetas()
 
+# ==========================================================
+# CRUD DETALLE_RECETA
+# ==========================================================
+
+class VentanaDetalleRecetas(tk.Toplevel):
+    def __init__(self, parent, conn):
+        super().__init__(parent)
+        self.conn = conn
+        self.id_detalle_seleccionado = None
+        self.id_receta_enganchada = None
+        self.id_medicamento_enganchado = None
+        self.mapa_recetas = {}
+        self.mapa_medicamentos = {}
+ 
+        self.title("Gestion de Detalle de Receta")
+        self.geometry("1050x600")
+ 
+        self._construir_barra_busqueda()
+        self._construir_tabla()
+        self._construir_formulario()
+        self._construir_botones()
+ 
+        self.cargar_detalle_recetas()
+ 
+    # ---------------- UI ----------------
+    def _construir_barra_busqueda(self):
+        frame = ttk.Frame(self)
+        frame.pack(fill="x", padx=10, pady=(10, 0))
+ 
+        ttk.Label(frame, text="Buscar (cedula / nombre paciente / medicamento):").pack(side="left")
+        self.entry_buscar = ttk.Entry(frame, width=30)
+        self.entry_buscar.pack(side="left", padx=5)
+        self.entry_buscar.bind("<Return>", lambda e: self.cargar_detalle_recetas())
+ 
+        ttk.Button(frame, text="Buscar", command=self.cargar_detalle_recetas).pack(side="left", padx=5)
+        ttk.Button(frame, text="Mostrar todos", command=self._mostrar_todos).pack(side="left")
+ 
+    def _construir_tabla(self):
+        columnas = ("ID Detalle", "ID Receta", "Cedula", "Nombre", "Ap. Primero",
+                    "ID Medicamento", "Medicamento", "Cantidad", "Dosis",
+                    "Frecuencia", "Duracion", "Precio Asig.")
+ 
+        self.tabla = ttk.Treeview(self, columns=columnas, show="headings", height=9)
+        for col in columnas:
+            self.tabla.heading(col, text=col)
+            self.tabla.column(col, width=90, anchor="w")
+ 
+        self.tabla.pack(fill="both", expand=True, padx=10, pady=10)
+        self.tabla.bind("<<TreeviewSelect>>", self._al_seleccionar_fila)
+ 
+    def _construir_formulario(self):
+        # --- sub-frame: enganchar receta por cedula ---
+        frame_receta = ttk.LabelFrame(self, text="Receta asociada")
+        frame_receta.pack(fill="x", padx=10, pady=(0, 5))
+ 
+        ttk.Label(frame_receta, text="Cedula paciente:").pack(side="left", padx=(5, 0))
+        self.entry_cedula_detalle = ttk.Entry(frame_receta, width=15)
+        self.entry_cedula_detalle.pack(side="left", padx=5)
+ 
+        ttk.Button(
+            frame_receta, text="Buscar recetas", command=self._buscar_recetas
+        ).pack(side="left", padx=5)
+ 
+        self.combo_recetas = ttk.Combobox(frame_receta, width=40, state="readonly")
+        self.combo_recetas.pack(side="left", padx=10)
+        self.combo_recetas.bind("<<ComboboxSelected>>", self._al_elegir_receta)
+ 
+        # --- sub-frame: enganchar medicamento por nombre ---
+        frame_medicamento = ttk.LabelFrame(self, text="Medicamento asociado")
+        frame_medicamento.pack(fill="x", padx=10, pady=(0, 5))
+ 
+        ttk.Label(frame_medicamento, text="Nombre:").pack(side="left", padx=(5, 0))
+        self.entry_nombre_medicamento = ttk.Entry(frame_medicamento, width=15)
+        self.entry_nombre_medicamento.pack(side="left", padx=5)
+ 
+        ttk.Button(
+            frame_medicamento, text="Buscar medicamentos", command=self._buscar_medicamentos
+        ).pack(side="left", padx=5)
+ 
+        self.combo_medicamentos = ttk.Combobox(frame_medicamento, width=40, state="readonly")
+        self.combo_medicamentos.pack(side="left", padx=10)
+        self.combo_medicamentos.bind("<<ComboboxSelected>>", self._al_elegir_medicamento)
+ 
+        # --- sub-frame: datos propios de DETALLE_RECETA ---
+        frame = ttk.LabelFrame(self, text="Datos del detalle")
+        frame.pack(fill="x", padx=10, pady=(0, 10))
+ 
+        self.vars = {
+            "cantidad": tk.StringVar(),
+            "dosis": tk.StringVar(),
+            "frecuencia": tk.StringVar(),
+            "duracion": tk.StringVar(),
+            "precio_asignado": tk.StringVar(),
+        }
+ 
+        campos = [
+            ("Cantidad", "cantidad"), ("Dosis", "dosis"),
+            ("Frecuencia", "frecuencia"), ("Duracion", "duracion"),
+            ("Precio asignado", "precio_asignado"),
+        ]
+ 
+        for idx, (etiqueta, clave) in enumerate(campos):
+            fila, columna = divmod(idx, 2)
+            ttk.Label(frame, text=etiqueta).grid(row=fila, column=columna * 2, sticky="e", padx=5, pady=4)
+            ttk.Entry(frame, textvariable=self.vars[clave], width=28).grid(
+                row=fila, column=columna * 2 + 1, sticky="w", padx=5, pady=4
+            )
+ 
+    def _construir_botones(self):
+        frame = ttk.Frame(self)
+        frame.pack(fill="x", padx=10, pady=(0, 10))
+ 
+        ttk.Button(frame, text="Nuevo", command=self._limpiar_formulario).pack(side="left", padx=5)
+        ttk.Button(frame, text="Guardar", command=self._guardar).pack(side="left", padx=5)
+        ttk.Button(frame, text="Eliminar", command=self._eliminar).pack(side="left", padx=5)
+        ttk.Button(frame, text="Cerrar", command=self.destroy).pack(side="right", padx=5)
+ 
+    # ---------------- Logica ----------------
+    def cargar_detalle_recetas(self):
+        filtro = self.entry_buscar.get().strip()
+        try:
+            filas = db.listar_detalle_recetas(self.conn, filtro)
+        except pyodbc.Error as e:
+            messagebox.showerror("Error", f"No se pudo consultar DETALLE_RECETA.\n\n{e}")
+            return
+ 
+        self.tabla.delete(*self.tabla.get_children())
+        for fila in filas:
+            self.tabla.insert("", "end", values=list(fila))
+ 
+    def _mostrar_todos(self):
+        self.entry_buscar.delete(0, "end")
+        self.cargar_detalle_recetas()
+ 
+    def _buscar_recetas(self):
+        cedula = self.entry_cedula_detalle.get().strip()
+        if not cedula:
+            messagebox.showwarning("Falta cedula", "Escribe una cedula para buscar.")
+            return
+ 
+        try:
+            recetas = db.buscar_recetas_por_cedula(self.conn, cedula)
+        except pyodbc.Error as e:
+            messagebox.showerror("Error", f"No se pudo buscar las recetas.\n\n{e}")
+            return
+ 
+        if not recetas:
+            messagebox.showwarning("Sin recetas", "Esa cedula no tiene recetas registradas.")
+            self.combo_recetas.set("")
+            self.combo_recetas["values"] = []
+            self.mapa_recetas = {}
+            self.id_receta_enganchada = None
+            return
+ 
+        self.mapa_recetas = {}
+        opciones = []
+        for id_receta, fecha, estado in recetas:
+            texto = f"ID {id_receta} - {str(fecha)[:16]} - {estado}"
+            self.mapa_recetas[texto] = id_receta
+            opciones.append(texto)
+ 
+        self.combo_recetas["values"] = opciones
+        self.combo_recetas.current(0)
+        self.id_receta_enganchada = self.mapa_recetas[opciones[0]]
+ 
+    def _al_elegir_receta(self, event):
+        texto = self.combo_recetas.get()
+        self.id_receta_enganchada = self.mapa_recetas.get(texto)
+ 
+    def _buscar_medicamentos(self):
+        nombre = self.entry_nombre_medicamento.get().strip()
+        if not nombre:
+            messagebox.showwarning("Falta nombre", "Escribe (parte del) nombre del medicamento.")
+            return
+ 
+        try:
+            medicamentos = db.buscar_medicamentos_por_nombre(self.conn, nombre)
+        except pyodbc.Error as e:
+            messagebox.showerror("Error", f"No se pudo buscar medicamentos.\n\n{e}")
+            return
+ 
+        if not medicamentos:
+            messagebox.showwarning("Sin resultados", "No hay medicamentos con ese nombre.")
+            self.combo_medicamentos.set("")
+            self.combo_medicamentos["values"] = []
+            self.mapa_medicamentos = {}
+            self.id_medicamento_enganchado = None
+            return
+ 
+        self.mapa_medicamentos = {}
+        opciones = []
+        for id_medicamento, nombre_med, presentacion in medicamentos:
+            texto = f"ID {id_medicamento} - {nombre_med} ({presentacion})"
+            self.mapa_medicamentos[texto] = id_medicamento
+            opciones.append(texto)
+ 
+        self.combo_medicamentos["values"] = opciones
+        self.combo_medicamentos.current(0)
+        self.id_medicamento_enganchado = self.mapa_medicamentos[opciones[0]]
+ 
+    def _al_elegir_medicamento(self, event):
+        texto = self.combo_medicamentos.get()
+        self.id_medicamento_enganchado = self.mapa_medicamentos.get(texto)
+ 
+    def _al_seleccionar_fila(self, event):
+        seleccion = self.tabla.selection()
+        if not seleccion:
+            return
+        valores = self.tabla.item(seleccion[0], "values")
+ 
+        self.id_detalle_seleccionado = int(valores[0])
+        self.id_receta_enganchada = int(valores[1])
+        self.id_medicamento_enganchado = int(valores[5])
+ 
+        self.entry_cedula_detalle.delete(0, "end")
+        self.entry_cedula_detalle.insert(0, valores[2])
+        self.combo_recetas.set(f"ID {valores[1]} ({valores[3]} {valores[4]})")
+        self.combo_recetas["values"] = [self.combo_recetas.get()]
+ 
+        self.entry_nombre_medicamento.delete(0, "end")
+        self.entry_nombre_medicamento.insert(0, valores[6])
+        self.combo_medicamentos.set(f"ID {valores[5]} - {valores[6]}")
+        self.combo_medicamentos["values"] = [self.combo_medicamentos.get()]
+ 
+        self.vars["cantidad"].set(valores[7])
+        self.vars["dosis"].set(valores[8])
+        self.vars["frecuencia"].set(valores[9])
+        self.vars["duracion"].set(valores[10])
+        self.vars["precio_asignado"].set(valores[11])
+ 
+    def _limpiar_formulario(self):
+        self.id_detalle_seleccionado = None
+        self.id_receta_enganchada = None
+        self.id_medicamento_enganchado = None
+        self.mapa_recetas = {}
+        self.mapa_medicamentos = {}
+        self.entry_cedula_detalle.delete(0, "end")
+        self.combo_recetas.set("")
+        self.combo_recetas["values"] = []
+        self.entry_nombre_medicamento.delete(0, "end")
+        self.combo_medicamentos.set("")
+        self.combo_medicamentos["values"] = []
+        for var in self.vars.values():
+            var.set("")
+        self.tabla.selection_remove(self.tabla.selection())
+ 
+    def _leer_formulario(self) -> dict:
+        return {
+            "id_receta": self.id_receta_enganchada,
+            "id_medicamento": self.id_medicamento_enganchado,
+            "cantidad": self.vars["cantidad"].get().strip(),
+            "dosis": self.vars["dosis"].get().strip(),
+            "frecuencia": self.vars["frecuencia"].get().strip(),
+            "duracion": self.vars["duracion"].get().strip(),
+            "precio_asignado": self.vars["precio_asignado"].get().strip(),
+        }
+ 
+    def _validar(self, data: dict) -> bool:
+        if self.id_detalle_seleccionado is None:
+            if data["id_receta"] is None:
+                messagebox.showwarning(
+                    "Falta receta", "Busca al paciente y elige una receta antes de guardar."
+                )
+                return False
+            if data["id_medicamento"] is None:
+                messagebox.showwarning(
+                    "Falta medicamento", "Busca y elige un medicamento antes de guardar."
+                )
+                return False
+ 
+        obligatorios = ["cantidad", "dosis", "frecuencia", "duracion", "precio_asignado"]
+        faltantes = [c for c in obligatorios if not data[c]]
+        if faltantes:
+            messagebox.showwarning("Datos incompletos", f"Faltan campos: {', '.join(faltantes)}")
+            return False
+ 
+        try:
+            int(data["cantidad"])
+        except ValueError:
+            messagebox.showwarning("Cantidad invalida", "La cantidad debe ser un numero entero.")
+            return False
+ 
+        try:
+            float(data["precio_asignado"])
+        except ValueError:
+            messagebox.showwarning("Precio invalido", "El precio asignado debe ser un numero (ej. 1500.00).")
+            return False
+ 
+        return True
+ 
+    def _guardar(self):
+        data = self._leer_formulario()
+        if not self._validar(data):
+            return
+ 
+        try:
+            if self.id_detalle_seleccionado is None:
+                db.crear_detalle_receta(self.conn, data)
+                messagebox.showinfo("Exito", "Detalle de receta creado correctamente.")
+            else:
+                db.actualizar_detalle_receta(self.conn, self.id_detalle_seleccionado, data)
+                messagebox.showinfo("Exito", "Detalle de receta actualizado correctamente.")
+        except pyodbc.Error as e:
+            messagebox.showerror("Error al guardar", str(e))
+            return
+ 
+        self._limpiar_formulario()
+        self.cargar_detalle_recetas()
+ 
+    def _eliminar(self):
+        if self.id_detalle_seleccionado is None:
+            messagebox.showwarning("Sin seleccion", "Selecciona un detalle de la tabla primero.")
+            return
+ 
+        confirmar = messagebox.askyesno(
+            "Confirmar", "¿Seguro que deseas eliminar este detalle de receta? Esta accion no se puede deshacer."
+        )
+        if not confirmar:
+            return
+ 
+        try:
+            db.eliminar_detalle_receta(self.conn, self.id_detalle_seleccionado)
+            messagebox.showinfo("Exito", "Detalle de receta eliminado.")
+        except pyodbc.Error as e:
+            messagebox.showerror("Error al eliminar", str(e))
+            return
+ 
+        self._limpiar_formulario()
+        self.cargar_detalle_recetas()
+
 
 # ==========================================================
-# PUNTO DE ENTRADA
+# CRUD INVENTARIO
+# ==========================================================
+
+class VentanaInventario(tk.Toplevel):
+    def __init__(self, parent, conn):
+        super().__init__(parent)
+        self.conn = conn
+        self.id_inventario_seleccionado = None
+        self.id_medicamento_enganchado = None
+        self.mapa_medicamentos = {}
+ 
+        self.title("Gestion de Inventario")
+        self.geometry("1000x560")
+ 
+        self._construir_barra_busqueda()
+        self._construir_tabla()
+        self._construir_formulario()
+        self._construir_botones()
+ 
+        self.cargar_inventario()
+ 
+    # ---------------- UI ----------------
+    def _construir_barra_busqueda(self):
+        frame = ttk.Frame(self)
+        frame.pack(fill="x", padx=10, pady=(10, 0))
+ 
+        ttk.Label(frame, text="Buscar (medicamento / lote):").pack(side="left")
+        self.entry_buscar = ttk.Entry(frame, width=30)
+        self.entry_buscar.pack(side="left", padx=5)
+        self.entry_buscar.bind("<Return>", lambda e: self.cargar_inventario())
+ 
+        ttk.Button(frame, text="Buscar", command=self.cargar_inventario).pack(side="left", padx=5)
+        ttk.Button(frame, text="Mostrar todos", command=self._mostrar_todos).pack(side="left")
+ 
+    def _construir_tabla(self):
+        columnas = ("ID Inventario", "ID Medicamento", "Medicamento", "Lote",
+                    "F. Ingreso", "F. Vencimiento", "Cantidad", "Stock Minimo")
+ 
+        self.tabla = ttk.Treeview(self, columns=columnas, show="headings", height=12)
+        for col in columnas:
+            self.tabla.heading(col, text=col)
+            self.tabla.column(col, width=100, anchor="w")
+        self.tabla.column("Medicamento", width=140)
+ 
+        self.tabla.pack(fill="both", expand=True, padx=10, pady=10)
+        self.tabla.bind("<<TreeviewSelect>>", self._al_seleccionar_fila)
+ 
+    def _construir_formulario(self):
+        # --- sub-frame: enganchar medicamento por nombre ---
+        frame_medicamento = ttk.LabelFrame(self, text="Medicamento asociado")
+        frame_medicamento.pack(fill="x", padx=10, pady=(0, 5))
+ 
+        ttk.Label(frame_medicamento, text="Nombre:").pack(side="left", padx=(5, 0))
+        self.entry_nombre_medicamento = ttk.Entry(frame_medicamento, width=15)
+        self.entry_nombre_medicamento.pack(side="left", padx=5)
+ 
+        ttk.Button(
+            frame_medicamento, text="Buscar medicamentos", command=self._buscar_medicamentos
+        ).pack(side="left", padx=5)
+ 
+        self.combo_medicamentos = ttk.Combobox(frame_medicamento, width=45, state="readonly")
+        self.combo_medicamentos.pack(side="left", padx=10)
+        self.combo_medicamentos.bind("<<ComboboxSelected>>", self._al_elegir_medicamento)
+ 
+        # --- sub-frame: datos propios de INVENTARIO ---
+        frame = ttk.LabelFrame(self, text="Datos del inventario")
+        frame.pack(fill="x", padx=10, pady=(0, 10))
+ 
+        self.vars = {
+            "lote": tk.StringVar(),
+            "fecha_ingreso": tk.StringVar(),
+            "fecha_vencimiento": tk.StringVar(),
+            "cantidad": tk.StringVar(),
+            "stock_minimo": tk.StringVar(),
+        }
+ 
+        campos = [
+            ("Lote", "lote"), ("F. Ingreso (AAAA-MM-DD)", "fecha_ingreso"),
+            ("F. Vencimiento (AAAA-MM-DD)", "fecha_vencimiento"), ("Cantidad", "cantidad"),
+            ("Stock minimo", "stock_minimo"),
+        ]
+ 
+        for idx, (etiqueta, clave) in enumerate(campos):
+            fila, columna = divmod(idx, 2)
+            ttk.Label(frame, text=etiqueta).grid(row=fila, column=columna * 2, sticky="e", padx=5, pady=4)
+            ttk.Entry(frame, textvariable=self.vars[clave], width=28).grid(
+                row=fila, column=columna * 2 + 1, sticky="w", padx=5, pady=4
+            )
+ 
+    def _construir_botones(self):
+        frame = ttk.Frame(self)
+        frame.pack(fill="x", padx=10, pady=(0, 10))
+ 
+        ttk.Button(frame, text="Nuevo", command=self._limpiar_formulario).pack(side="left", padx=5)
+        ttk.Button(frame, text="Guardar", command=self._guardar).pack(side="left", padx=5)
+        ttk.Button(frame, text="Eliminar", command=self._eliminar).pack(side="left", padx=5)
+        ttk.Button(frame, text="Cerrar", command=self.destroy).pack(side="right", padx=5)
+ 
+    # ---------------- Logica ----------------
+    def cargar_inventario(self):
+        filtro = self.entry_buscar.get().strip()
+        try:
+            filas = db.listar_inventario(self.conn, filtro)
+        except pyodbc.Error as e:
+            messagebox.showerror("Error", f"No se pudo consultar INVENTARIO.\n\n{e}")
+            return
+ 
+        self.tabla.delete(*self.tabla.get_children())
+        for fila in filas:
+            self.tabla.insert("", "end", values=list(fila))
+ 
+    def _mostrar_todos(self):
+        self.entry_buscar.delete(0, "end")
+        self.cargar_inventario()
+ 
+    def _buscar_medicamentos(self):
+        nombre = self.entry_nombre_medicamento.get().strip()
+        if not nombre:
+            messagebox.showwarning("Falta nombre", "Escribe (parte del) nombre del medicamento.")
+            return
+ 
+        try:
+            medicamentos = db.buscar_medicamentos_por_nombre(self.conn, nombre)
+        except pyodbc.Error as e:
+            messagebox.showerror("Error", f"No se pudo buscar medicamentos.\n\n{e}")
+            return
+ 
+        if not medicamentos:
+            messagebox.showwarning("Sin resultados", "No hay medicamentos con ese nombre.")
+            self.combo_medicamentos.set("")
+            self.combo_medicamentos["values"] = []
+            self.mapa_medicamentos = {}
+            self.id_medicamento_enganchado = None
+            return
+ 
+        self.mapa_medicamentos = {}
+        opciones = []
+        for id_medicamento, nombre_med, presentacion in medicamentos:
+            texto = f"ID {id_medicamento} - {nombre_med} ({presentacion})"
+            self.mapa_medicamentos[texto] = id_medicamento
+            opciones.append(texto)
+ 
+        self.combo_medicamentos["values"] = opciones
+        self.combo_medicamentos.current(0)
+        self.id_medicamento_enganchado = self.mapa_medicamentos[opciones[0]]
+ 
+    def _al_elegir_medicamento(self, event):
+        texto = self.combo_medicamentos.get()
+        self.id_medicamento_enganchado = self.mapa_medicamentos.get(texto)
+ 
+    def _al_seleccionar_fila(self, event):
+        seleccion = self.tabla.selection()
+        if not seleccion:
+            return
+        valores = self.tabla.item(seleccion[0], "values")
+ 
+        self.id_inventario_seleccionado = int(valores[0])
+        self.id_medicamento_enganchado = int(valores[1])
+ 
+        self.entry_nombre_medicamento.delete(0, "end")
+        self.entry_nombre_medicamento.insert(0, valores[2])
+        self.combo_medicamentos.set(f"ID {valores[1]} - {valores[2]}")
+        self.combo_medicamentos["values"] = [self.combo_medicamentos.get()]
+ 
+        self.vars["lote"].set(valores[3])
+        self.vars["fecha_ingreso"].set(str(valores[4])[:10])
+        self.vars["fecha_vencimiento"].set(str(valores[5])[:10])
+        self.vars["cantidad"].set(valores[6])
+        self.vars["stock_minimo"].set(valores[7])
+ 
+    def _limpiar_formulario(self):
+        self.id_inventario_seleccionado = None
+        self.id_medicamento_enganchado = None
+        self.mapa_medicamentos = {}
+        self.entry_nombre_medicamento.delete(0, "end")
+        self.combo_medicamentos.set("")
+        self.combo_medicamentos["values"] = []
+        for var in self.vars.values():
+            var.set("")
+        self.tabla.selection_remove(self.tabla.selection())
+ 
+    def _leer_formulario(self) -> dict:
+        return {
+            "id_medicamento": self.id_medicamento_enganchado,
+            "lote": self.vars["lote"].get().strip(),
+            "fecha_ingreso": self.vars["fecha_ingreso"].get().strip(),
+            "fecha_vencimiento": self.vars["fecha_vencimiento"].get().strip(),
+            "cantidad": self.vars["cantidad"].get().strip(),
+            "stock_minimo": self.vars["stock_minimo"].get().strip(),
+        }
+ 
+    def _validar(self, data: dict) -> bool:
+        if self.id_inventario_seleccionado is None and data["id_medicamento"] is None:
+            messagebox.showwarning(
+                "Falta medicamento", "Busca y elige un medicamento antes de guardar."
+            )
+            return False
+ 
+        obligatorios = ["lote", "fecha_ingreso", "fecha_vencimiento", "cantidad", "stock_minimo"]
+        faltantes = [c for c in obligatorios if not data[c]]
+        if faltantes:
+            messagebox.showwarning("Datos incompletos", f"Faltan campos: {', '.join(faltantes)}")
+            return False
+ 
+        try:
+            int(data["cantidad"])
+            int(data["stock_minimo"])
+        except ValueError:
+            messagebox.showwarning(
+                "Datos invalidos", "Cantidad y stock minimo deben ser numeros enteros."
+            )
+            return False
+ 
+        return True
+ 
+    def _guardar(self):
+        data = self._leer_formulario()
+        if not self._validar(data):
+            return
+ 
+        try:
+            if self.id_inventario_seleccionado is None:
+                db.crear_inventario(self.conn, data)
+                messagebox.showinfo("Exito", "Registro de inventario creado correctamente.")
+            else:
+                db.actualizar_inventario(self.conn, self.id_inventario_seleccionado, data)
+                messagebox.showinfo("Exito", "Registro de inventario actualizado correctamente.")
+        except pyodbc.Error as e:
+            messagebox.showerror("Error al guardar", str(e))
+            return
+ 
+        self._limpiar_formulario()
+        self.cargar_inventario()
+ 
+    def _eliminar(self):
+        if self.id_inventario_seleccionado is None:
+            messagebox.showwarning("Sin seleccion", "Selecciona un registro de la tabla primero.")
+            return
+ 
+        confirmar = messagebox.askyesno(
+            "Confirmar", "¿Seguro que deseas eliminar este registro de inventario? Esta accion no se puede deshacer."
+        )
+        if not confirmar:
+            return
+ 
+        try:
+            db.eliminar_inventario(self.conn, self.id_inventario_seleccionado)
+            messagebox.showinfo("Exito", "Registro de inventario eliminado.")
+        except pyodbc.Error as e:
+            messagebox.showerror("Error al eliminar", str(e))
+            return
+ 
+        self._limpiar_formulario()
+        self.cargar_inventario()
+ 
+# ==========================================================
+# AUDITORIA (SOLO LECTURA)
+# ==========================================================
+# A diferencia de todos los CRUD anteriores, esta ventana NO tiene
+# formulario ni botones de Nuevo/Guardar/Eliminar -- AUDITORIA se
+# llena sola por triggers, no se edita a mano. "Ver detalle" muestra
+# VALOR_ANTERIOR/VALOR_NUEVO completos, ya que son varchar(MAX) y en
+# la tabla se veran cortados.
+class VentanaAuditoria(tk.Toplevel):
+    def __init__(self, parent, conn):
+        super().__init__(parent)
+        self.conn = conn
+        self.detalle_por_item = {}
+ 
+        self.title("Auditoria (solo lectura)")
+        self.geometry("1050x600")
+ 
+        self._construir_barra_busqueda()
+        self._construir_tabla()
+        self._construir_botones()
+ 
+        self.cargar_auditoria()
+ 
+    # ---------------- UI ----------------
+    def _construir_barra_busqueda(self):
+        frame = ttk.Frame(self)
+        frame.pack(fill="x", padx=10, pady=(10, 0))
+ 
+        ttk.Label(frame, text="Buscar (tabla afectada / accion / usuario):").pack(side="left")
+        self.entry_buscar = ttk.Entry(frame, width=30)
+        self.entry_buscar.pack(side="left", padx=5)
+        self.entry_buscar.bind("<Return>", lambda e: self.cargar_auditoria())
+ 
+        ttk.Button(frame, text="Buscar", command=self.cargar_auditoria).pack(side="left", padx=5)
+        ttk.Button(frame, text="Mostrar todos", command=self._mostrar_todos).pack(side="left")
+ 
+    def _construir_tabla(self):
+        columnas = ("ID Auditoria", "Usuario", "Nombre", "Ap. Primero", "Tabla Afectada",
+                    "Registro Afectado", "Accion", "Fecha", "Hora", "IP Equipo")
+ 
+        self.tabla = ttk.Treeview(self, columns=columnas, show="headings", height=18)
+        for col in columnas:
+            self.tabla.heading(col, text=col)
+            self.tabla.column(col, width=95, anchor="w")
+ 
+        self.tabla.pack(fill="both", expand=True, padx=10, pady=10)
+        # doble clic tambien abre el detalle, ademas del boton
+        self.tabla.bind("<Double-1>", lambda e: self._ver_detalle())
+ 
+    def _construir_botones(self):
+        frame = ttk.Frame(self)
+        frame.pack(fill="x", padx=10, pady=(0, 10))
+ 
+        ttk.Button(frame, text="Ver detalle", command=self._ver_detalle).pack(side="left", padx=5)
+        ttk.Button(frame, text="Cerrar", command=self.destroy).pack(side="right", padx=5)
+ 
+    # ---------------- Logica ----------------
+    def cargar_auditoria(self):
+        filtro = self.entry_buscar.get().strip()
+        try:
+            filas = db.listar_auditoria(self.conn, filtro)
+        except pyodbc.Error as e:
+            messagebox.showerror("Error", f"No se pudo consultar AUDITORIA.\n\n{e}")
+            return
+ 
+        self.tabla.delete(*self.tabla.get_children())
+        self.detalle_por_item = {}
+ 
+        for fila in filas:
+            visibles = fila[0:9] + (fila[11],)  # todo menos valor_anterior/valor_nuevo
+            item_id = self.tabla.insert("", "end", values=visibles)
+            self.detalle_por_item[item_id] = (fila[9], fila[10])
+ 
+    def _mostrar_todos(self):
+        self.entry_buscar.delete(0, "end")
+        self.cargar_auditoria()
+ 
+    def _ver_detalle(self):
+        seleccion = self.tabla.selection()
+        if not seleccion:
+            messagebox.showwarning("Sin seleccion", "Selecciona un registro de la tabla primero.")
+            return
+ 
+        item_id = seleccion[0]
+        detalle = self.detalle_por_item.get(item_id)
+        if detalle is None:
+            return
+ 
+        valor_anterior, valor_nuevo = detalle
+        valor_anterior = valor_anterior if valor_anterior not in (None, "None") else "(sin valor anterior)"
+        valor_nuevo = valor_nuevo if valor_nuevo not in (None, "None") else "(sin valor nuevo)"
+ 
+        ventana_detalle = tk.Toplevel(self)
+        ventana_detalle.title("Detalle del cambio")
+        ventana_detalle.geometry("600x400")
+ 
+        ttk.Label(ventana_detalle, text="Valor anterior:", font=("Segoe UI", 9, "bold")).pack(
+            anchor="w", padx=10, pady=(10, 0)
+        )
+        texto_anterior = tk.Text(ventana_detalle, height=8, wrap="word")
+        texto_anterior.pack(fill="both", expand=True, padx=10, pady=(0, 5))
+        texto_anterior.insert("1.0", valor_anterior)
+        texto_anterior.config(state="disabled")
+ 
+        ttk.Label(ventana_detalle, text="Valor nuevo:", font=("Segoe UI", 9, "bold")).pack(
+            anchor="w", padx=10, pady=(5, 0)
+        )
+        texto_nuevo = tk.Text(ventana_detalle, height=8, wrap="word")
+        texto_nuevo.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        texto_nuevo.insert("1.0", valor_nuevo)
+        texto_nuevo.config(state="disabled")
+
+
+
+# ==========================================================
+# MAIN
 # ==========================================================
 def main():
     login_win = LoginWindow()
