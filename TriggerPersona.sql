@@ -1,6 +1,6 @@
 /*  CAST(SESSION_CONTEXT(N'ID_USUARIO') as int) es para el ID_Usuario de los trigger cuando tengamos lo de python */
 
- /* 1. tipo de tabla 'TVP'     disque para permitir poner varias cosas en lo de valor nuevo/viejo pero con lo de python       drop type TipoAuditoria;*/ 
+ /* 1. tipo de tabla 'TVP'     permitir poner varias cosas en lo de valor nuevo/viejo pero con lo de python       drop type TipoAuditoria;*/ 
 
  /*App < Trigger < tvp < SP*/
  /*el trigger detecta el evento, manda la info al tvp 'tipoauditoria' para permitir que muestren varios datos por medio de @Aud*/
@@ -563,3 +563,123 @@ Begin
     exec SP_RegistrarAuditoria @Registros = @Aud;
 end;
 go
+
+/*------------------------------------------------*/
+
+/* 4. Vistas */
+
+Create view Vista_PacientesActivos as
+select p.ID_PERSONA, p.CEDULA, p.NOMBRE, p.PRIMER_APELLIDO, p.SEGUNDO_APELLIDO,p.TELEFONO, p.CORREO, pac.ID_PACIENTE, pac.TIPO_SANGRE, pac.SEGURO_MEDICO, pac.NOMBRE_CONTACTO, pac.TELEFONO_CONTACTO, pac.PARENTESCO, pac.FECHA_REGISTRO
+
+from PERSONA p
+INNER JOIN PACIENTE pac on pac.ID_PERSONA = p.ID_PERSONA
+where p.ESTADO = 1
+
+select * from Vista_PacientesActivos
+
+/*------------------------------------------------*/
+
+Alter view Vista_RecetasPendientes as
+Select r.ID_RECETA, r.FECHA, r.ESTADO, p.NOMBRE + ' ' + p.PRIMER_APELLIDO  as Paciente, pm.NOMBRE + ' ' + pm.PRIMER_APELLIDO as Medico
+    
+from RECETA r
+inner join CONSULTA c on c.ID_CONSULTA   = r.ID_CONSULTA
+inner join EXPEDIENTE e on e.ID_EXPEDIENTE = c.ID_EXPEDIENTE
+inner join PACIENTE pac on pac.ID_PACIENTE = e.ID_PACIENTE
+inner join PERSONA p on p.ID_PERSONA = pac.ID_PERSONA
+inner join MEDICO m  on m.ID_MEDICO = c.ID_MEDICO
+inner join EMPLEADO emp on emp.ID_EMPLEADO = m.ID_EMPLEADO
+inner join PERSONA pm  on pm.ID_PERSONA   = emp.ID_PERSONA
+where r.ESTADO = 'PENDIENTE'
+
+select * from Vista_RecetasPendientes
+
+/*------------------------------------------------*/
+
+Alter view Vista_ResumenInventario as
+select m.ID_MEDICAMENTO, m.NOMBRE, m.PRESENTACION, SUM(inv.CANTIDAD) as StockTotal, MAX(inv.STOCK_MINIMO) as StockMinimoReferencia, case when SUM(inv.CANTIDAD) < MAX(inv.STOCK_MINIMO) then 'Bajo' else 'Normal' end as Estado   
+from MEDICAMENTO m
+inner join INVENTARIO inv on inv.ID_MEDICAMENTO = m.ID_MEDICAMENTO
+group by m.ID_MEDICAMENTO, m.NOMBRE, m.PRESENTACION
+
+Select * from Vista_ResumenInventario
+
+/*------------------------------------------------*/
+
+alter view Vista_HistorialConsultas as
+select c.ID_CONSULTA, c.FECHA, c.MOTIVO, c.DIAGNOSTICO, c.TRATAMIENTO, c.OBSERVACIONES, p.CEDULA as CedulaPaciente, p.NOMBRE + ' ' + p.PRIMER_APELLIDO as Paciente, pm.NOMBRE + ' ' + pm.PRIMER_APELLIDO as Medico, m.ESPECIALIDAD
+  
+from CONSULTA c
+inner join EXPEDIENTE e on e.ID_EXPEDIENTE = c.ID_EXPEDIENTE
+inner join PACIENTE pac on pac.ID_PACIENTE = e.ID_PACIENTE
+inner join PERSONA p on p.ID_PERSONA = pac.ID_PERSONA
+inner join MEDICO m on m.ID_MEDICO = c.ID_MEDICO
+inner join EMPLEADO emp on emp.ID_EMPLEADO = m.ID_EMPLEADO
+inner join PERSONA pm on pm.ID_PERSONA = emp.ID_PERSONA
+
+select * from Vista_HistorialConsultas
+
+/*------------------------------------------------*/
+
+create view Vista_EmpleadosActivos as
+select e.ID_EMPLEADO, p.CEDULA, p.NOMBRE, p.PRIMER_APELLIDO, p.SEGUNDO_APELLIDO, e.PUESTO, e.FECHA_INGRESO, e.SALARIO, e.ESTADO_LABORAL
+from EMPLEADO e
+inner join PERSONA p on p.ID_PERSONA = e.ID_PERSONA
+where e.ESTADO_LABORAL = 'Activo'
+
+select * from Vista_EmpleadosActivos
+
+/*------------------------------------------------*/
+
+Alter view Vista_MedicamentosPorVencer as /*en los siguientes 90 dias*/
+select i.ID_INVENTARIO, m.NOMBRE, i.LOTE, i.FECHA_VENCIMIENTO, i.CANTIDAD, DATEDIFF(DAY, GETDATE(), i.FECHA_VENCIMIENTO) AS DiasParaVencer
+from INVENTARIO i
+inner join MEDICAMENTO m ON m.ID_MEDICAMENTO = i.ID_MEDICAMENTO
+where i.FECHA_VENCIMIENTO <= DATEADD(DAY, 90, GETDATE())
+
+Select * from Vista_MedicamentosPorVencer
+
+/*-------------------------------------------------*/
+
+alter view Vista_DetalleRecetaCompleto as
+Select r.ID_RECETA, r.FECHA as FechaReceta, r.ESTADO as EstadoReceta, p.NOMBRE + ' ' + p.PRIMER_APELLIDO as Paciente, dr.ID_DETALLE, m.NOMBRE as Medicamento, dr.CANTIDAD, dr.DOSIS, dr.FRECUENCIA, dr.DURACION, dr.PRECIO_ASIGNADO
+
+from RECETA r
+inner join DETALLE_RECETA dr on dr.ID_RECETA = r.ID_RECETA
+inner join MEDICAMENTO m on m.ID_MEDICAMENTO = dr.ID_MEDICAMENTO
+inner join CONSULTA c on c.ID_CONSULTA = r.ID_CONSULTA
+inner join EXPEDIENTE e on e.ID_EXPEDIENTE = c.ID_EXPEDIENTE
+inner join PACIENTE pac on pac.ID_PACIENTE = e.ID_PACIENTE
+inner join PERSONA p on p.ID_PERSONA = pac.ID_PERSONA
+
+Select * from Vista_DetalleRecetaCompleto
+
+/*-------------------------------------------*/
+
+alter View Vista_AuditoriaLegible as
+select a.ID_AUDITORIA, u.USUARIO as UsuarioResponsable, a.TABLA_AFECTADA, a.REGISTRO_AFECTADO, a.ACCION, a.FECHA, a.HORA, a.IP_EQUIPO, a.VALOR_ANTERIOR, a.VALOR_NUEVO
+from AUDITORIA a
+inner join USUARIO u on u.ID_USUARIO = a.ID_USUARIO
+
+Select * from Vista_AuditoriaLegible
+
+/*------------------------------------------------*/
+
+Create view Vista_MedicosDisponibles as
+select m.ID_MEDICO, p.NOMBRE + ' ' + p.PRIMER_APELLIDO as Medico, m.ESPECIALIDAD, m.CONSULTORIO, m.CODIGO_COLEGIADO
+from MEDICO m
+inner join EMPLEADO e on e.ID_EMPLEADO = m.ID_EMPLEADO
+inner join PERSONA p on p.ID_PERSONA = e.ID_PERSONA
+where e.ESTADO_LABORAL = 'Activo'
+
+Select * from Vista_MedicosDisponibles
+
+/*---------------------------------------------*/
+
+Create view Vista_PacientesSinSeguro as
+Select p.ID_PERSONA, p.CEDULA, p.NOMBRE, p.PRIMER_APELLIDO, pac.ID_PACIENTE, pac.SEGURO_MEDICO
+from PACIENTE pac
+inner join PERSONA p on p.ID_PERSONA = pac.ID_PERSONA
+where pac.SEGURO_MEDICO is null or pac.SEGURO_MEDICO = 'Ninguno'
+
+select * from Vista_PacientesSinSeguro
