@@ -258,3 +258,625 @@ def eliminar_paciente(conn: pyodbc.Connection, id_paciente: int) -> None:
     cursor.execute("DELETE FROM PACIENTE WHERE ID_PACIENTE = ?", id_paciente)
     conn.commit()
 
+# ------------------------------------------------------------------
+# CRUD - EXPEDIENTE
+# ------------------------------------------------------------------
+# EXPEDIENTE depende de PACIENTE. Para enganchar el paciente se busca por la cedula de
+# la PERSONA asociada
+COLUMNAS_EXPEDIENTE = [
+    "e.ID_EXPEDIENTE", "e.ID_PACIENTE", "per.CEDULA", "per.NOMBRE", "per.PRIMER_APELLIDO",
+    "e.ALERGIAS", "e.ENFERMEDADES_CRONICAS", "e.ANTECEDENTES",
+    "e.OBSERVACIONES", "e.FECHA_CREACION",
+]
+ 
+ 
+def buscar_paciente_por_cedula(conn: pyodbc.Connection, cedula: str):
+    """Devuelve (ID_PACIENTE, NOMBRE, PRIMER_APELLIDO) o None si la
+    cedula no pertenece a ningun paciente registrado."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT pac.ID_PACIENTE, per.NOMBRE, per.PRIMER_APELLIDO
+        FROM PACIENTE pac
+        INNER JOIN PERSONA per ON per.ID_PERSONA = pac.ID_PERSONA
+        WHERE per.CEDULA = ?
+        """,
+        cedula,
+    )
+    return cursor.fetchone()
+ 
+ 
+def listar_expedientes(conn: pyodbc.Connection, filtro: str = ""):
+    """Devuelve todos los expedientes con datos de PACIENTE/PERSONA
+    via JOIN, opcionalmente filtrados por cedula, nombre o apellido."""
+    cursor = conn.cursor()
+    if filtro:
+        like = f"%{filtro}%"
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_EXPEDIENTE)}
+            FROM EXPEDIENTE e
+            INNER JOIN PACIENTE p ON p.ID_PACIENTE = e.ID_PACIENTE
+            INNER JOIN PERSONA per ON per.ID_PERSONA = p.ID_PERSONA
+            WHERE per.CEDULA LIKE ? OR per.NOMBRE LIKE ? OR per.PRIMER_APELLIDO LIKE ?
+            ORDER BY e.ID_EXPEDIENTE
+            """,
+            (like, like, like),
+        )
+    else:
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_EXPEDIENTE)}
+            FROM EXPEDIENTE e
+            INNER JOIN PACIENTE p ON p.ID_PACIENTE = e.ID_PACIENTE
+            INNER JOIN PERSONA per ON per.ID_PERSONA = p.ID_PERSONA
+            ORDER BY e.ID_EXPEDIENTE
+            """
+        )
+    return cursor.fetchall()
+ 
+ 
+def crear_expediente(conn: pyodbc.Connection, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO EXPEDIENTE (ID_PACIENTE, ALERGIAS, ENFERMEDADES_CRONICAS,
+                                    ANTECEDENTES, OBSERVACIONES, FECHA_CREACION)
+        VALUES (?, ?, ?, ?, ?, GETDATE())
+        """,
+        (
+            data["id_paciente"], data["alergias"] or None, data["enfermedades_cronicas"] or None,
+            data["antecedentes"] or None, data["observaciones"] or None,
+        ),
+    )
+    conn.commit()
+ 
+ 
+def actualizar_expediente(conn: pyodbc.Connection, id_expediente: int, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE EXPEDIENTE
+        SET ALERGIAS = ?, ENFERMEDADES_CRONICAS = ?, ANTECEDENTES = ?, OBSERVACIONES = ?
+        WHERE ID_EXPEDIENTE = ?
+        """,
+        (
+            data["alergias"] or None, data["enfermedades_cronicas"] or None,
+            data["antecedentes"] or None, data["observaciones"] or None, id_expediente,
+        ),
+    )
+    conn.commit()
+ 
+ 
+def eliminar_expediente(conn: pyodbc.Connection, id_expediente: int) -> None:
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM EXPEDIENTE WHERE ID_EXPEDIENTE = ?", id_expediente)
+    conn.commit()
+
+# ------------------------------------------------------------------
+# CRUD - EMPLEADO
+# ------------------------------------------------------------------
+# EMPLEADO depende de PERSONA
+ 
+COLUMNAS_EMPLEADO = [
+    "emp.ID_EMPLEADO", "emp.ID_PERSONA", "per.CEDULA", "per.NOMBRE", "per.PRIMER_APELLIDO",
+    "emp.PUESTO", "emp.FECHA_INGRESO", "emp.SALARIO", "emp.ESTADO_LABORAL",
+]
+
+def listar_empleados(conn: pyodbc.Connection, filtro: str = ""):
+    """Devuelve todos los empleados con datos de PERSONA via JOIN,
+    opcionalmente filtrados por cedula, nombre o apellido."""
+    cursor = conn.cursor()
+    if filtro:
+        like = f"%{filtro}%"
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_EMPLEADO)}
+            FROM EMPLEADO emp
+            INNER JOIN PERSONA per ON per.ID_PERSONA = emp.ID_PERSONA
+            WHERE per.CEDULA LIKE ? OR per.NOMBRE LIKE ? OR per.PRIMER_APELLIDO LIKE ?
+            ORDER BY emp.ID_EMPLEADO
+            """,
+            (like, like, like),
+        )
+    else:
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_EMPLEADO)}
+            FROM EMPLEADO emp
+            INNER JOIN PERSONA per ON per.ID_PERSONA = emp.ID_PERSONA
+            ORDER BY emp.ID_EMPLEADO
+            """
+        )
+    return cursor.fetchall()
+ 
+ 
+def crear_empleado(conn: pyodbc.Connection, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO EMPLEADO (ID_PERSONA, PUESTO, FECHA_INGRESO, SALARIO, ESTADO_LABORAL)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            data["id_persona"], data["puesto"], data["fecha_ingreso"],
+            data["salario"], data["estado_laboral"],
+        ),
+    )
+    conn.commit()
+ 
+ 
+def actualizar_empleado(conn: pyodbc.Connection, id_empleado: int, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE EMPLEADO
+        SET PUESTO = ?, FECHA_INGRESO = ?, SALARIO = ?, ESTADO_LABORAL = ?
+        WHERE ID_EMPLEADO = ?
+        """,
+        (
+            data["puesto"], data["fecha_ingreso"], data["salario"],
+            data["estado_laboral"], id_empleado,
+        ),
+    )
+    conn.commit()
+ 
+ 
+def eliminar_empleado(conn: pyodbc.Connection, id_empleado: int) -> None:
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM EMPLEADO WHERE ID_EMPLEADO = ?", id_empleado)
+    conn.commit()
+
+# ------------------------------------------------------------------
+# CRUD - USUARIO
+# ------------------------------------------------------------------
+# USUARIO depende de EMPLEADO. Se engancha buscando el empleado por la cedula de su PERSONA asociada.
+# ULTIMO_ACCESO no se toca desde este CRUD: ya se actualiza solo dentro de login().
+
+COLUMNAS_USUARIO = [
+    "u.ID_USUARIO", "u.ID_EMPLEADO", "per.CEDULA", "per.NOMBRE", "per.PRIMER_APELLIDO",
+    "u.USUARIO", "u.CLAVE_ACCESO", "u.ULTIMO_ACCESO", "u.ESTADO",
+]
+ 
+ 
+def buscar_empleado_por_cedula(conn: pyodbc.Connection, cedula: str):
+    """Devuelve (ID_EMPLEADO, NOMBRE, PRIMER_APELLIDO) o None si la
+    cedula no pertenece a ningun empleado registrado."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT emp.ID_EMPLEADO, per.NOMBRE, per.PRIMER_APELLIDO
+        FROM EMPLEADO emp
+        INNER JOIN PERSONA per ON per.ID_PERSONA = emp.ID_PERSONA
+        WHERE per.CEDULA = ?
+        """,
+        cedula,
+    )
+    return cursor.fetchone()
+ 
+ 
+def listar_usuarios(conn: pyodbc.Connection, filtro: str = ""):
+    """Devuelve todos los usuarios con datos de EMPLEADO/PERSONA via
+    JOIN, opcionalmente filtrados por cedula, nombre, apellido o
+    nombre de usuario."""
+    cursor = conn.cursor()
+    if filtro:
+        like = f"%{filtro}%"
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_USUARIO)}
+            FROM USUARIO u
+            INNER JOIN EMPLEADO emp ON emp.ID_EMPLEADO = u.ID_EMPLEADO
+            INNER JOIN PERSONA per ON per.ID_PERSONA = emp.ID_PERSONA
+            WHERE per.CEDULA LIKE ? OR per.NOMBRE LIKE ?
+            OR per.PRIMER_APELLIDO LIKE ? OR u.USUARIO LIKE ?
+            ORDER BY u.ID_USUARIO
+            """,
+            (like, like, like, like),
+        )
+    else:
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_USUARIO)}
+            FROM USUARIO u
+            INNER JOIN EMPLEADO emp ON emp.ID_EMPLEADO = u.ID_EMPLEADO
+            INNER JOIN PERSONA per ON per.ID_PERSONA = emp.ID_PERSONA
+            ORDER BY u.ID_USUARIO
+            """
+        )
+    return cursor.fetchall()
+ 
+ 
+def crear_usuario(conn: pyodbc.Connection, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO USUARIO (ID_EMPLEADO, USUARIO, CLAVE_ACCESO, ESTADO)
+        VALUES (?, ?, ?, ?)
+        """,
+        (data["id_empleado"], data["usuario"], data["clave_acceso"], data["estado"]),
+    )
+    conn.commit()
+ 
+ 
+def actualizar_usuario(conn: pyodbc.Connection, id_usuario: int, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE USUARIO
+        SET USUARIO = ?, CLAVE_ACCESO = ?, ESTADO = ?
+        WHERE ID_USUARIO = ?
+        """,
+        (data["usuario"], data["clave_acceso"], data["estado"], id_usuario),
+    )
+    conn.commit()
+ 
+ 
+def eliminar_usuario(conn: pyodbc.Connection, id_usuario: int) -> None:
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM USUARIO WHERE ID_USUARIO = ?", id_usuario)
+    conn.commit()
+
+
+# ------------------------------------------------------------------
+# CRUD - MEDICO
+# ------------------------------------------------------------------
+# MEDICO depende de EMPLEADO, igual que USUARIO. 
+
+COLUMNAS_MEDICO = [
+    "m.ID_MEDICO", "m.ID_EMPLEADO", "per.CEDULA", "per.NOMBRE", "per.PRIMER_APELLIDO",
+    "m.CODIGO_COLEGIADO", "m.ESPECIALIDAD", "m.CONSULTORIO",
+]
+ 
+ 
+def listar_medicos(conn: pyodbc.Connection, filtro: str = ""):
+    """Devuelve todos los medicos con datos de EMPLEADO/PERSONA via
+    JOIN, opcionalmente filtrados por cedula, nombre, apellido o
+    especialidad."""
+    cursor = conn.cursor()
+    if filtro:
+        like = f"%{filtro}%"
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_MEDICO)}
+            FROM MEDICO m
+            INNER JOIN EMPLEADO emp ON emp.ID_EMPLEADO = m.ID_EMPLEADO
+            INNER JOIN PERSONA per ON per.ID_PERSONA = emp.ID_PERSONA
+            WHERE per.CEDULA LIKE ? OR per.NOMBRE LIKE ?
+            OR per.PRIMER_APELLIDO LIKE ? OR m.ESPECIALIDAD LIKE ?
+            ORDER BY m.ID_MEDICO
+            """,
+            (like, like, like, like),
+        )
+    else:
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_MEDICO)}
+            FROM MEDICO m
+            INNER JOIN EMPLEADO emp ON emp.ID_EMPLEADO = m.ID_EMPLEADO
+            INNER JOIN PERSONA per ON per.ID_PERSONA = emp.ID_PERSONA
+            ORDER BY m.ID_MEDICO
+            """
+        )
+    return cursor.fetchall()
+ 
+ 
+def crear_medico(conn: pyodbc.Connection, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO MEDICO (ID_EMPLEADO, CODIGO_COLEGIADO, ESPECIALIDAD, CONSULTORIO)
+        VALUES (?, ?, ?, ?)
+        """,
+        (data["id_empleado"], data["codigo_colegiado"], data["especialidad"], data["consultorio"]),
+    )
+    conn.commit()
+ 
+ 
+def actualizar_medico(conn: pyodbc.Connection, id_medico: int, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE MEDICO
+        SET CODIGO_COLEGIADO = ?, ESPECIALIDAD = ?, CONSULTORIO = ?
+        WHERE ID_MEDICO = ?
+        """,
+        (data["codigo_colegiado"], data["especialidad"], data["consultorio"], id_medico),
+    )
+    conn.commit()
+ 
+ 
+def eliminar_medico(conn: pyodbc.Connection, id_medico: int) -> None:
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM MEDICO WHERE ID_MEDICO = ?", id_medico)
+    conn.commit()
+
+
+# ------------------------------------------------------------------
+# CRUD - CONSULTA
+# ------------------------------------------------------------------
+# CONSULTA tiene DOS llaves foraneas obligatorias: ID_EXPEDIENTE y
+# ID_MEDICO. Cada una se engancha por separado buscando por la cedula
+# de la persona correspondiente (paciente por un lado, medico por otro).
+
+COLUMNAS_CONSULTA = [
+    "c.ID_CONSULTA", "c.ID_EXPEDIENTE", "perpac.CEDULA", "perpac.NOMBRE", "perpac.PRIMER_APELLIDO",
+    "c.ID_MEDICO", "permed.NOMBRE", "permed.PRIMER_APELLIDO",
+    "c.FECHA", "c.MOTIVO", "c.DIAGNOSTICO", "c.TRATAMIENTO", "c.OBSERVACIONES",
+]
+ 
+ 
+def buscar_expediente_por_cedula(conn: pyodbc.Connection, cedula: str):
+    """Devuelve (ID_EXPEDIENTE, NOMBRE, PRIMER_APELLIDO) del paciente
+    dueño del expediente, o None si la cedula no tiene expediente."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT e.ID_EXPEDIENTE, per.NOMBRE, per.PRIMER_APELLIDO
+        FROM EXPEDIENTE e
+        INNER JOIN PACIENTE pac ON pac.ID_PACIENTE = e.ID_PACIENTE
+        INNER JOIN PERSONA per ON per.ID_PERSONA = pac.ID_PERSONA
+        WHERE per.CEDULA = ?
+        """,
+        cedula,
+    )
+    return cursor.fetchone()
+ 
+ 
+def buscar_medico_por_cedula(conn: pyodbc.Connection, cedula: str):
+    """Devuelve (ID_MEDICO, NOMBRE, PRIMER_APELLIDO) o None si la
+    cedula no pertenece a ningun medico registrado."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT m.ID_MEDICO, per.NOMBRE, per.PRIMER_APELLIDO
+        FROM MEDICO m
+        INNER JOIN EMPLEADO emp ON emp.ID_EMPLEADO = m.ID_EMPLEADO
+        INNER JOIN PERSONA per ON per.ID_PERSONA = emp.ID_PERSONA
+        WHERE per.CEDULA = ?
+        """,
+        cedula,
+    )
+    return cursor.fetchone()
+ 
+ 
+def listar_consultas(conn: pyodbc.Connection, filtro: str = ""):
+    """Devuelve todas las consultas con datos del paciente y del
+    medico via JOIN, opcionalmente filtradas por cedula, nombre o
+    apellido del paciente."""
+    cursor = conn.cursor()
+    if filtro:
+        like = f"%{filtro}%"
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_CONSULTA)}
+            FROM CONSULTA c
+            INNER JOIN EXPEDIENTE e ON e.ID_EXPEDIENTE = c.ID_EXPEDIENTE
+            INNER JOIN PACIENTE pac ON pac.ID_PACIENTE = e.ID_PACIENTE
+            INNER JOIN PERSONA perpac ON perpac.ID_PERSONA = pac.ID_PERSONA
+            INNER JOIN MEDICO m ON m.ID_MEDICO = c.ID_MEDICO
+            INNER JOIN EMPLEADO emp ON emp.ID_EMPLEADO = m.ID_EMPLEADO
+            INNER JOIN PERSONA permed ON permed.ID_PERSONA = emp.ID_PERSONA
+            WHERE perpac.CEDULA LIKE ? OR perpac.NOMBRE LIKE ? OR perpac.PRIMER_APELLIDO LIKE ?
+            ORDER BY c.ID_CONSULTA
+            """,
+            (like, like, like),
+        )
+    else:
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_CONSULTA)}
+            FROM CONSULTA c
+            INNER JOIN EXPEDIENTE e ON e.ID_EXPEDIENTE = c.ID_EXPEDIENTE
+            INNER JOIN PACIENTE pac ON pac.ID_PACIENTE = e.ID_PACIENTE
+            INNER JOIN PERSONA perpac ON perpac.ID_PERSONA = pac.ID_PERSONA
+            INNER JOIN MEDICO m ON m.ID_MEDICO = c.ID_MEDICO
+            INNER JOIN EMPLEADO emp ON emp.ID_EMPLEADO = m.ID_EMPLEADO
+            INNER JOIN PERSONA permed ON permed.ID_PERSONA = emp.ID_PERSONA
+            ORDER BY c.ID_CONSULTA
+            """
+        )
+    return cursor.fetchall()
+ 
+ 
+def crear_consulta(conn: pyodbc.Connection, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO CONSULTA (ID_EXPEDIENTE, ID_MEDICO, FECHA, MOTIVO,
+                                DIAGNOSTICO, TRATAMIENTO, OBSERVACIONES)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            data["id_expediente"], data["id_medico"], data["fecha"], data["motivo"],
+            data["diagnostico"], data["tratamiento"] or None, data["observaciones"] or None,
+        ),
+    )
+    conn.commit()
+ 
+ 
+def actualizar_consulta(conn: pyodbc.Connection, id_consulta: int, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE CONSULTA
+        SET FECHA = ?, MOTIVO = ?, DIAGNOSTICO = ?, TRATAMIENTO = ?, OBSERVACIONES = ?
+        WHERE ID_CONSULTA = ?
+        """,
+        (
+            data["fecha"], data["motivo"], data["diagnostico"],
+            data["tratamiento"] or None, data["observaciones"] or None, id_consulta,
+        ),
+    )
+    conn.commit()
+ 
+ 
+def eliminar_consulta(conn: pyodbc.Connection, id_consulta: int) -> None:
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM CONSULTA WHERE ID_CONSULTA = ?", id_consulta)
+    conn.commit()
+
+    # ------------------------------------------------------------------
+# CRUD - MEDICAMENTO
+# ------------------------------------------------------------------
+# MEDICAMENTO no depende de ninguna otra tabla (no tiene FK), asi que
+# no hace falta enganchar nada por cedula
+ 
+COLUMNAS_MEDICAMENTO = [
+    "ID_MEDICAMENTO", "NOMBRE", "DESCRIPCION", "PRESENTACION", "CONCENTRACION",
+    "PRECIO", "FABRICANTE", "REQUIERE_RECETA", "ESTADO",
+]
+
+
+def listar_medicamentos(conn: pyodbc.Connection, filtro: str = ""):
+    """Devuelve todos los medicamentos, opcionalmente filtrados por
+    nombre o fabricante (busqueda parcial)."""
+    cursor = conn.cursor()
+    if filtro:
+        like = f"%{filtro}%"
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_MEDICAMENTO)}
+            FROM MEDICAMENTO
+            WHERE NOMBRE LIKE ? OR FABRICANTE LIKE ?
+            ORDER BY ID_MEDICAMENTO
+            """,
+            (like, like),
+        )
+    else:
+        cursor.execute(
+            f"SELECT {', '.join(COLUMNAS_MEDICAMENTO)} FROM MEDICAMENTO ORDER BY ID_MEDICAMENTO"
+        )
+    return cursor.fetchall()
+ 
+ 
+def crear_medicamento(conn: pyodbc.Connection, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO MEDICAMENTO (NOMBRE, DESCRIPCION, PRESENTACION, CONCENTRACION,
+                                    PRECIO, FABRICANTE, REQUIERE_RECETA, ESTADO)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            data["nombre"], data["descripcion"] or None, data["presentacion"],
+            data["concentracion"], data["precio"], data["fabricante"] or None,
+            data["requiere_receta"], data["estado"],
+        ),
+    )
+    conn.commit()
+ 
+ 
+def actualizar_medicamento(conn: pyodbc.Connection, id_medicamento: int, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE MEDICAMENTO
+        SET NOMBRE = ?, DESCRIPCION = ?, PRESENTACION = ?, CONCENTRACION = ?,
+            PRECIO = ?, FABRICANTE = ?, REQUIERE_RECETA = ?, ESTADO = ?
+        WHERE ID_MEDICAMENTO = ?
+        """,
+        (
+            data["nombre"], data["descripcion"] or None, data["presentacion"],
+            data["concentracion"], data["precio"], data["fabricante"] or None,
+            data["requiere_receta"], data["estado"], id_medicamento,
+        ),
+    )
+    conn.commit()
+ 
+ 
+def eliminar_medicamento(conn: pyodbc.Connection, id_medicamento: int) -> None:
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM MEDICAMENTO WHERE ID_MEDICAMENTO = ?", id_medicamento)
+    conn.commit()
+
+COLUMNAS_RECETA = [
+    "r.ID_RECETA", "r.ID_CONSULTA", "per.CEDULA", "per.NOMBRE", "per.PRIMER_APELLIDO",
+    "r.FECHA", "r.ESTADO",
+]
+ 
+ 
+def buscar_consultas_por_cedula(conn: pyodbc.Connection, cedula: str):
+    """Devuelve una lista de (ID_CONSULTA, FECHA, MOTIVO) con todas
+    las consultas del paciente con esa cedula, mas recientes primero."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT c.ID_CONSULTA, c.FECHA, c.MOTIVO
+        FROM CONSULTA c
+        INNER JOIN EXPEDIENTE e ON e.ID_EXPEDIENTE = c.ID_EXPEDIENTE
+        INNER JOIN PACIENTE pac ON pac.ID_PACIENTE = e.ID_PACIENTE
+        INNER JOIN PERSONA per ON per.ID_PERSONA = pac.ID_PERSONA
+        WHERE per.CEDULA = ?
+        ORDER BY c.FECHA DESC
+        """,
+        cedula,
+    )
+    return cursor.fetchall()
+ 
+ 
+def listar_recetas(conn: pyodbc.Connection, filtro: str = ""):
+    """Devuelve todas las recetas con la cedula/nombre del paciente
+    via JOIN, opcionalmente filtradas por cedula, nombre o apellido."""
+    cursor = conn.cursor()
+    if filtro:
+        like = f"%{filtro}%"
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_RECETA)}
+            FROM RECETA r
+            INNER JOIN CONSULTA c ON c.ID_CONSULTA = r.ID_CONSULTA
+            INNER JOIN EXPEDIENTE e ON e.ID_EXPEDIENTE = c.ID_EXPEDIENTE
+            INNER JOIN PACIENTE pac ON pac.ID_PACIENTE = e.ID_PACIENTE
+            INNER JOIN PERSONA per ON per.ID_PERSONA = pac.ID_PERSONA
+            WHERE per.CEDULA LIKE ? OR per.NOMBRE LIKE ? OR per.PRIMER_APELLIDO LIKE ?
+            ORDER BY r.ID_RECETA
+            """,
+            (like, like, like),
+        )
+    else:
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_RECETA)}
+            FROM RECETA r
+            INNER JOIN CONSULTA c ON c.ID_CONSULTA = r.ID_CONSULTA
+            INNER JOIN EXPEDIENTE e ON e.ID_EXPEDIENTE = c.ID_EXPEDIENTE
+            INNER JOIN PACIENTE pac ON pac.ID_PACIENTE = e.ID_PACIENTE
+            INNER JOIN PERSONA per ON per.ID_PERSONA = pac.ID_PERSONA
+            ORDER BY r.ID_RECETA
+            """
+        )
+    return cursor.fetchall()
+ 
+ 
+def crear_receta(conn: pyodbc.Connection, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO RECETA (ID_CONSULTA, FECHA, ESTADO)
+        VALUES (?, ?, ?)
+        """,
+        (data["id_consulta"], data["fecha"], data["estado"]),
+    )
+    conn.commit()
+ 
+ 
+def actualizar_receta(conn: pyodbc.Connection, id_receta: int, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE RECETA
+        SET FECHA = ?, ESTADO = ?
+        WHERE ID_RECETA = ?
+        """,
+        (data["fecha"], data["estado"], id_receta),
+    )
+    conn.commit()
+ 
+ 
+def eliminar_receta(conn: pyodbc.Connection, id_receta: int) -> None:
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM RECETA WHERE ID_RECETA = ?", id_receta)
+    conn.commit()
+
+    
