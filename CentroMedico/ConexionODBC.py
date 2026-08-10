@@ -879,4 +879,250 @@ def eliminar_receta(conn: pyodbc.Connection, id_receta: int) -> None:
     cursor.execute("DELETE FROM RECETA WHERE ID_RECETA = ?", id_receta)
     conn.commit()
 
-    
+
+# ------------------------------------------------------------------
+# CRUD - DETALLE_RECETA
+# ------------------------------------------------------------------
+# DETALLE_RECETA tiene DOS llaves foraneas obligatorias: ID_RECETA e
+# ID_MEDICAMENTO. Igual que en RECETA, la busqueda de recetas por
+# cedula puede devolver varias (un paciente con varias recetas), asi
+# que buscar_recetas_por_cedula() devuelve una lista.
+ 
+COLUMNAS_DETALLE_RECETA = [
+    "d.ID_DETALLE", "d.ID_RECETA", "per.CEDULA", "per.NOMBRE", "per.PRIMER_APELLIDO",
+    "d.ID_MEDICAMENTO", "med.NOMBRE", "d.CANTIDAD", "d.DOSIS", "d.FRECUENCIA",
+    "d.DURACION", "d.PRECIO_ASIGNADO",
+]
+
+def buscar_recetas_por_cedula(conn: pyodbc.Connection, cedula: str):
+    """Devuelve una lista de (ID_RECETA, FECHA, ESTADO) con todas las
+    recetas del paciente con esa cedula, mas recientes primero."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT r.ID_RECETA, r.FECHA, r.ESTADO
+        FROM RECETA r
+        INNER JOIN CONSULTA c ON c.ID_CONSULTA = r.ID_CONSULTA
+        INNER JOIN EXPEDIENTE e ON e.ID_EXPEDIENTE = c.ID_EXPEDIENTE
+        INNER JOIN PACIENTE pac ON pac.ID_PACIENTE = e.ID_PACIENTE
+        INNER JOIN PERSONA per ON per.ID_PERSONA = pac.ID_PERSONA
+        WHERE per.CEDULA = ?
+        ORDER BY r.FECHA DESC
+        """,
+        cedula,
+    )
+    return cursor.fetchall()
+ 
+ 
+def buscar_medicamentos_por_nombre(conn: pyodbc.Connection, nombre: str):
+    """Devuelve una lista de (ID_MEDICAMENTO, NOMBRE, PRESENTACION)
+    cuyo nombre coincide parcialmente con el texto buscado."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT ID_MEDICAMENTO, NOMBRE, PRESENTACION
+        FROM MEDICAMENTO
+        WHERE NOMBRE LIKE ?
+        ORDER BY NOMBRE
+        """,
+        f"%{nombre}%",
+    )
+    return cursor.fetchall()
+ 
+ 
+def listar_detalle_recetas(conn: pyodbc.Connection, filtro: str = ""):
+    """Devuelve todos los detalles de receta con cedula/nombre del
+    paciente y nombre del medicamento via JOIN, opcionalmente
+    filtrados por cedula, nombre del paciente o nombre del medicamento."""
+    cursor = conn.cursor()
+    if filtro:
+        like = f"%{filtro}%"
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_DETALLE_RECETA)}
+            FROM DETALLE_RECETA d
+            INNER JOIN RECETA r ON r.ID_RECETA = d.ID_RECETA
+            INNER JOIN CONSULTA c ON c.ID_CONSULTA = r.ID_CONSULTA
+            INNER JOIN EXPEDIENTE e ON e.ID_EXPEDIENTE = c.ID_EXPEDIENTE
+            INNER JOIN PACIENTE pac ON pac.ID_PACIENTE = e.ID_PACIENTE
+            INNER JOIN PERSONA per ON per.ID_PERSONA = pac.ID_PERSONA
+            INNER JOIN MEDICAMENTO med ON med.ID_MEDICAMENTO = d.ID_MEDICAMENTO
+            WHERE per.CEDULA LIKE ? OR per.NOMBRE LIKE ? OR med.NOMBRE LIKE ?
+            ORDER BY d.ID_DETALLE
+            """,
+            (like, like, like),
+        )
+    else:
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_DETALLE_RECETA)}
+            FROM DETALLE_RECETA d
+            INNER JOIN RECETA r ON r.ID_RECETA = d.ID_RECETA
+            INNER JOIN CONSULTA c ON c.ID_CONSULTA = r.ID_CONSULTA
+            INNER JOIN EXPEDIENTE e ON e.ID_EXPEDIENTE = c.ID_EXPEDIENTE
+            INNER JOIN PACIENTE pac ON pac.ID_PACIENTE = e.ID_PACIENTE
+            INNER JOIN PERSONA per ON per.ID_PERSONA = pac.ID_PERSONA
+            INNER JOIN MEDICAMENTO med ON med.ID_MEDICAMENTO = d.ID_MEDICAMENTO
+            ORDER BY d.ID_DETALLE
+            """
+        )
+    return cursor.fetchall()
+ 
+ 
+def crear_detalle_receta(conn: pyodbc.Connection, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO DETALLE_RECETA (ID_RECETA, ID_MEDICAMENTO, CANTIDAD, DOSIS,
+                                        FRECUENCIA, DURACION, PRECIO_ASIGNADO)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            data["id_receta"], data["id_medicamento"], data["cantidad"], data["dosis"],
+            data["frecuencia"], data["duracion"], data["precio_asignado"],
+        ),
+    )
+    conn.commit()
+ 
+ 
+def actualizar_detalle_receta(conn: pyodbc.Connection, id_detalle: int, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE DETALLE_RECETA
+        SET CANTIDAD = ?, DOSIS = ?, FRECUENCIA = ?, DURACION = ?, PRECIO_ASIGNADO = ?
+        WHERE ID_DETALLE = ?
+        """,
+        (
+            data["cantidad"], data["dosis"], data["frecuencia"],
+            data["duracion"], data["precio_asignado"], id_detalle,
+        ),
+    )
+    conn.commit()
+ 
+ 
+def eliminar_detalle_receta(conn: pyodbc.Connection, id_detalle: int) -> None:
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM DETALLE_RECETA WHERE ID_DETALLE = ?", id_detalle)
+    conn.commit()
+
+
+# ------------------------------------------------------------------
+# CRUD - INVENTARIO
+# ------------------------------------------------------------------
+# INVENTARIO depende de MEDICAMENTO
+
+COLUMNAS_INVENTARIO = [
+    "i.ID_INVENTARIO", "i.ID_MEDICAMENTO", "med.NOMBRE", "i.LOTE",
+    "i.FECHA_INGRESO", "i.FECHA_VENCIMIENTO", "i.CANTIDAD", "i.STOCK_MINIMO",
+]
+ 
+ 
+def listar_inventario(conn: pyodbc.Connection, filtro: str = ""):
+    """Devuelve todo el inventario con el nombre del medicamento via
+    JOIN, opcionalmente filtrado por nombre de medicamento o lote."""
+    cursor = conn.cursor()
+    if filtro:
+        like = f"%{filtro}%"
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_INVENTARIO)}
+            FROM INVENTARIO i
+            INNER JOIN MEDICAMENTO med ON med.ID_MEDICAMENTO = i.ID_MEDICAMENTO
+            WHERE med.NOMBRE LIKE ? OR i.LOTE LIKE ?
+            ORDER BY i.ID_INVENTARIO
+            """,
+            (like, like),
+        )
+    else:
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_INVENTARIO)}
+            FROM INVENTARIO i
+            INNER JOIN MEDICAMENTO med ON med.ID_MEDICAMENTO = i.ID_MEDICAMENTO
+            ORDER BY i.ID_INVENTARIO
+            """
+        )
+    return cursor.fetchall()
+ 
+ 
+def crear_inventario(conn: pyodbc.Connection, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO INVENTARIO (ID_MEDICAMENTO, LOTE, FECHA_INGRESO,
+                                    FECHA_VENCIMIENTO, CANTIDAD, STOCK_MINIMO)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            data["id_medicamento"], data["lote"], data["fecha_ingreso"],
+            data["fecha_vencimiento"], data["cantidad"], data["stock_minimo"],
+        ),
+    )
+    conn.commit()
+ 
+ 
+def actualizar_inventario(conn: pyodbc.Connection, id_inventario: int, data: dict) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE INVENTARIO
+        SET LOTE = ?, FECHA_INGRESO = ?, FECHA_VENCIMIENTO = ?, CANTIDAD = ?, STOCK_MINIMO = ?
+        WHERE ID_INVENTARIO = ?
+        """,
+        (
+            data["lote"], data["fecha_ingreso"], data["fecha_vencimiento"],
+            data["cantidad"], data["stock_minimo"], id_inventario,
+        ),
+    )
+    conn.commit()
+ 
+ 
+def eliminar_inventario(conn: pyodbc.Connection, id_inventario: int) -> None:
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM INVENTARIO WHERE ID_INVENTARIO = ?", id_inventario)
+    conn.commit()
+
+# ------------------------------------------------------------------
+# AUDITORIA
+# ------------------------------------------------------------------
+# AUDITORIA se llena sola via triggers
+ 
+COLUMNAS_AUDITORIA = [
+    "a.ID_AUDITORIA", "u.USUARIO", "per.NOMBRE", "per.PRIMER_APELLIDO",
+    "a.TABLA_AFECTADA", "a.REGISTRO_AFECTADO", "a.ACCION", "a.FECHA", "a.HORA",
+    "a.VALOR_ANTERIOR", "a.VALOR_NUEVO", "a.IP_EQUIPO",
+]
+ 
+ 
+def listar_auditoria(conn: pyodbc.Connection, filtro: str = ""):
+    """Devuelve los registros de auditoria con el nombre de usuario/
+    persona que hizo el cambio via JOIN, mas recientes primero.
+    Filtro opcional por tabla afectada, accion o nombre de usuario."""
+    cursor = conn.cursor()
+    if filtro:
+        like = f"%{filtro}%"
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_AUDITORIA)}
+            FROM AUDITORIA a
+            INNER JOIN USUARIO u ON u.ID_USUARIO = a.ID_USUARIO
+            INNER JOIN EMPLEADO emp ON emp.ID_EMPLEADO = u.ID_EMPLEADO
+            INNER JOIN PERSONA per ON per.ID_PERSONA = emp.ID_PERSONA
+            WHERE a.TABLA_AFECTADA LIKE ? OR a.ACCION LIKE ? OR u.USUARIO LIKE ?
+            ORDER BY a.FECHA DESC, a.HORA DESC
+            """,
+            (like, like, like),
+        )
+    else:
+        cursor.execute(
+            f"""
+            SELECT {', '.join(COLUMNAS_AUDITORIA)}
+            FROM AUDITORIA a
+            INNER JOIN USUARIO u ON u.ID_USUARIO = a.ID_USUARIO
+            INNER JOIN EMPLEADO emp ON emp.ID_EMPLEADO = u.ID_EMPLEADO
+            INNER JOIN PERSONA per ON per.ID_PERSONA = emp.ID_PERSONA
+            ORDER BY a.FECHA DESC, a.HORA DESC
+            """
+        )
+    return cursor.fetchall()
