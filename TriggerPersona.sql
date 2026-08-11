@@ -1,3 +1,6 @@
+	USE Centro_Medico
+	GO
+
 /*  CAST(SESSION_CONTEXT(N'ID_USUARIO') as int) es para el ID_Usuario de los trigger cuando tengamos lo de python */
 
  /* 1. tipo de tabla 'TVP'     permitir poner varias cosas en lo de valor nuevo/viejo pero con lo de python       drop type TipoAuditoria;*/ 
@@ -236,6 +239,7 @@ Begin
 end;
 go
 
+<<<<<<< HEAD
 delete PERSONA where ID_PERSONA = 39
 
 /*---------------- Paciente ----------------*/
@@ -683,3 +687,57 @@ inner join PERSONA p on p.ID_PERSONA = pac.ID_PERSONA
 where pac.SEGURO_MEDICO is null or pac.SEGURO_MEDICO = 'Ninguno'
 
 select * from Vista_PacientesSinSeguro
+=======
+delete PERSONA where ID_PERSONA = 34
+
+
+
+/*
+====================================Cálculos y Funciones========================================
+
+10 cálculos o funciones para cumplir con las necesidades operativas del negocio.
+
+*/
+
+-- ----------------------------------------------------------
+-- 1. FN_EdadPersona
+-- Calcula la edad actual (en años cumplidos) de una persona a partir de su fecha de nacimiento. 
+
+CREATE FUNCTION Funcion_EdadPersona (@ID_PERSONA INT)
+RETURNS INT
+AS
+BEGIN
+    DECLARE @Edad INT;
+    SELECT @Edad = DATEDIFF(YEAR, FECHA_NACIMIENTO, GETDATE()) --Agarra la diferencia entre el año de nacimiento y la fecha de hoy para le edad
+                   - CASE
+                        WHEN (MONTH(FECHA_NACIMIENTO) > MONTH(GETDATE())) --depende de eso, 
+                          OR (MONTH(FECHA_NACIMIENTO) = MONTH(GETDATE())
+                              AND DAY(FECHA_NACIMIENTO) > DAY(GETDATE()))
+                        THEN 1 ELSE 0
+                     END
+    FROM PERSONA
+    WHERE ID_PERSONA = @ID_PERSONA;
+ 
+    RETURN @Edad;
+END;
+GO
+--para llamarlo, usa id persona 
+SELECT dbo.Funcion_EdadPersona(2) as [Edad Actual];
+
+/* no esta terminado!
+-- 2. FN_EdadPersona
+-- Calcula la edad actual (en años cumplidos) de una persona a partir de su fecha de nacimiento. 
+SELECT dr.ID_MEDICAMENTO as ID, 
+	   m.NOMBRE as [Nombre Medicamento], 
+	   m.PRECIO as[Precio actual], 
+	   dr.PRECIO_ASIGNADO as [Precio al momento de la venta], 
+	   dr.CANTIDAD as Cantidad, 
+	   (dr.CANTIDAD*dr.PRECIO_ASIGNADO) as [Precio Final de la Receta]
+FROM DETALLE_RECETA dr
+INNER JOIN MEDICAMENTO m on m.ID_MEDICAMENTO=dr.ID_MEDICAMENTO
+ --Aca podriamos generar un trigger o un procedimiento almacenado cuyo 
+ */
+
+
+
+>>>>>>> origin/main
