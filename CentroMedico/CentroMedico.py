@@ -2833,11 +2833,7 @@ class VentanaInventario(tk.Toplevel):
 # ==========================================================
 # AUDITORIA (SOLO LECTURA)
 # ==========================================================
-# A diferencia de todos los CRUD anteriores, esta ventana NO tiene
-# formulario ni botones de Nuevo/Guardar/Eliminar -- AUDITORIA se
-# llena sola por triggers, no se edita a mano. "Ver detalle" muestra
-# VALOR_ANTERIOR/VALOR_NUEVO completos, ya que son varchar(MAX) y en
-# la tabla se veran cortados.
+
 class VentanaAuditoria(tk.Toplevel):
     def __init__(self, parent, conn):
         super().__init__(parent)
