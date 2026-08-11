@@ -700,44 +700,204 @@ delete PERSONA where ID_PERSONA = 34
 */
 
 -- ----------------------------------------------------------
--- 1. FN_EdadPersona
+-- 1. Funcion_EdadPersona
 -- Calcula la edad actual (en años cumplidos) de una persona a partir de su fecha de nacimiento. 
 
 CREATE FUNCTION Funcion_EdadPersona (@ID_PERSONA INT)
 RETURNS INT
 AS
-BEGIN
-    DECLARE @Edad INT;
-    SELECT @Edad = DATEDIFF(YEAR, FECHA_NACIMIENTO, GETDATE()) --Agarra la diferencia entre el año de nacimiento y la fecha de hoy para le edad
-                   - CASE
-                        WHEN (MONTH(FECHA_NACIMIENTO) > MONTH(GETDATE())) --depende de eso, 
-                          OR (MONTH(FECHA_NACIMIENTO) = MONTH(GETDATE())
-                              AND DAY(FECHA_NACIMIENTO) > DAY(GETDATE()))
-                        THEN 1 ELSE 0
-                     END
-    FROM PERSONA
-    WHERE ID_PERSONA = @ID_PERSONA;
- 
-    RETURN @Edad;
-END;
+	BEGIN
+		DECLARE @Edad INT;
+		SELECT @Edad = DATEDIFF(YEAR, FECHA_NACIMIENTO, GETDATE()) --Agarra la diferencia entre el año de nacimiento y la fecha de hoy para le edad
+		- CASE
+			WHEN (MONTH(FECHA_NACIMIENTO) > MONTH(GETDATE())) --depende de eso, 
+			OR (MONTH(FECHA_NACIMIENTO) = MONTH(GETDATE())
+			AND DAY(FECHA_NACIMIENTO) > DAY(GETDATE()))
+			THEN 1 ELSE 0
+			END
+		FROM PERSONA
+		WHERE ID_PERSONA = @ID_PERSONA;
+		RETURN @Edad;
+	END;
 GO
 --para llamarlo, usa id persona 
 SELECT dbo.Funcion_EdadPersona(2) as [Edad Actual];
 
-/* no esta terminado!
--- 2. FN_EdadPersona
--- Calcula la edad actual (en años cumplidos) de una persona a partir de su fecha de nacimiento. 
-SELECT dr.ID_MEDICAMENTO as ID, 
-	   m.NOMBRE as [Nombre Medicamento], 
-	   m.PRECIO as[Precio actual], 
-	   dr.PRECIO_ASIGNADO as [Precio al momento de la venta], 
-	   dr.CANTIDAD as Cantidad, 
-	   (dr.CANTIDAD*dr.PRECIO_ASIGNADO) as [Precio Final de la Receta]
-FROM DETALLE_RECETA dr
-INNER JOIN MEDICAMENTO m on m.ID_MEDICAMENTO=dr.ID_MEDICAMENTO
- --Aca podriamos generar un trigger o un procedimiento almacenado cuyo 
- */
+
+-- 2. Funcion_AntiguedadEmpleado
+-- Calcula los años completos de servicio de un empleado, de esta manera podemos calcular beneficios a obtener
+
+CREATE FUNCTION Funcion_AntiguedadEmpleado (@ID_EMPLEADO INT)
+RETURNS INT
+AS
+	BEGIN
+		DECLARE @Antiguedad INT;
+		SELECT @Antiguedad = DATEDIFF(YEAR, FECHA_INGRESO, GETDATE())
+			- CASE
+			WHEN (MONTH(FECHA_INGRESO) > MONTH(GETDATE()))
+			OR (MONTH(FECHA_INGRESO) = MONTH(GETDATE())
+			AND DAY(FECHA_INGRESO) > DAY(GETDATE()))
+			THEN 1 ELSE 0
+			END
+		FROM EMPLEADO
+		WHERE ID_EMPLEADO = @ID_EMPLEADO;
+		RETURN @Antiguedad;
+	END;
+GO
+
+--para llamarlo, se le asigna un id de empleado
+
+SELECT dbo.Funcion_AntiguedadEmpleado(5);
+
+-- 3. Funcion_PrecioConIVA
+-- Aplica el 13% de IVA a un precio base. Es una pieza reutilizable por si se quiere calcular el IVA con otros calculos
+------------------------------------------------------------
+CREATE FUNCTION Funcion_PrecioConIVA (@Precio DECIMAL(10,2))
+RETURNS DECIMAL(10,2)
+AS
+	BEGIN
+		RETURN ROUND(@Precio * 1.13, 2);
+	END;
+GO
+--para llamarlo, se asigna un precio
+SELECT dbo.Funcion_PrecioConIVA(1000.00);
+
+-- 4. Funcion_TotalDetalleReceta
+-- Calcula el subtotal de una linea de DETALLE_RECETA (cantidad * precio asignado al momento de la venta).
+
+CREATE FUNCTION Funcion_TotalDetalleReceta (@ID_DETALLE INT)
+RETURNS DECIMAL(10,2)
+AS
+	BEGIN
+		DECLARE @Total DECIMAL(10,2);
+		SELECT @Total = CANTIDAD * PRECIO_ASIGNADO
+		FROM DETALLE_RECETA
+		WHERE ID_DETALLE = @ID_DETALLE;
+		RETURN @Total;
+	END;
+GO
+
+--llamarlo se le debe proporcionar el id detalle
+
+SELECT dbo.Funcion_TotalDetalleReceta(6)
+
+-- 5. Funcion_Vencimiento
+-- Calcula cuantos dias faltan para que venza un lote de inventario. Un numero negativo significa que ya vencio.
+
+CREATE FUNCTION Funcion_Vencimiento (@ID_INVENTARIO INT)
+RETURNS INT
+AS
+	BEGIN
+		DECLARE @Dias INT;
+		SELECT @Dias = DATEDIFF(DAY, GETDATE(), FECHA_VENCIMIENTO)
+		FROM INVENTARIO
+		WHERE ID_INVENTARIO = @ID_INVENTARIO;
+		RETURN @Dias;
+	END;
+GO
+
+--se manda el ID del inventario, o sea del item
+
+SELECT dbo.Funcion_Vencimiento(4);
+
+-- 6. Funcion_MedicinaDisponible
+-- Suma la cantidad total disponible de un medicamento sumando todos sus lotes del inventario. Sirve para saber cuanto hay en existencia 
+
+CREATE FUNCTION Funcion_MedicinaDisponible (@ID_MEDICAMENTO INT)
+RETURNS INT
+AS
+	BEGIN
+		DECLARE @Stock INT;
+		SELECT @Stock = SUM(CANTIDAD)
+		FROM INVENTARIO
+		WHERE ID_MEDICAMENTO = @ID_MEDICAMENTO;
+		RETURN ISNULL(@Stock, 0);
+	END;
+GO
+--le enviamos el ID del medicamento para el calculo
+SELECT dbo.Funcion_MedicinaDisponible(9)
+
+
+-- 7. Funcion_TotalConsultas
+-- Cuenta cuantas consultas atendio un medico dentro de un rango de fechas.
+
+CREATE FUNCTION Funcion_TotalConsultas(
+    @ID_MEDICO INT,
+    @FechaInicio DATE,
+    @FechaFin DATE
+)
+RETURNS INT
+AS
+	BEGIN
+		DECLARE @Total INT;
+		SELECT @Total = COUNT(*)
+		FROM CONSULTA
+		WHERE ID_MEDICO = @ID_MEDICO AND FECHA BETWEEN @FechaInicio AND @FechaFin;
+		RETURN ISNULL(@Total, 0);
+	END;
+GO
+
+--recibe 3 parametros distintos, id, y el rango de fechas
+
+SELECT dbo.Funcion_TotalConsultas(1, '2026-01-01', '2026-12-31');
 
 
 
->>>>>>> origin/main
+-- 8. Funcion_NombreCompleto
+-- nombre y apellidos de una persona en un solo texto.
+
+CREATE FUNCTION Funcion_NombreCompleto(@ID_PERSONA INT)
+RETURNS VARCHAR(100)
+AS
+	BEGIN
+		DECLARE @NombreCompleto VARCHAR(100);
+		SELECT @NombreCompleto = NOMBRE + ' ' + PRIMER_APELLIDO + ISNULL(' ' + SEGUNDO_APELLIDO, '')
+		FROM PERSONA
+		WHERE ID_PERSONA = @ID_PERSONA;
+		RETURN @NombreCompleto;
+	END;
+GO
+
+--para llamarlo unicamente se llama el id
+
+SELECT dbo.Funcion_NombreCompleto(16)
+
+-- 9. Funcion_TotalInventario
+-- Suma el valor monetario del inventario. Podria funcionar para reportes financieros
+
+CREATE FUNCTION Funcion_TotalInventario ()
+RETURNS DECIMAL(12,2)
+AS
+	BEGIN
+		DECLARE @ValorTotal DECIMAL(12,2);
+		SELECT @ValorTotal = SUM(i.CANTIDAD * m.PRECIO)
+		FROM INVENTARIO i
+		INNER JOIN MEDICAMENTO m ON m.ID_MEDICAMENTO = i.ID_MEDICAMENTO;
+		RETURN ISNULL(@ValorTotal, 0);
+	END;
+GO
+
+--este no recibe parametros, es un calculo del total de lo que tenemos
+
+SELECT dbo.Funcion_TotalInventario()
+
+
+-- 10. Funcion_TotalPacientesAtendidosxMedico
+--conta a las personas que ha podido atender el medico, no por consulta, son las personas
+
+CREATE FUNCTION Funcion_TotalPacientesAtendidosxMedico (@ID_MEDICO INT)
+RETURNS INT
+	AS
+	BEGIN
+		DECLARE @Total INT;
+			SELECT @Total = COUNT(DISTINCT e.ID_PACIENTE)
+			FROM CONSULTA c
+			INNER JOIN EXPEDIENTE e ON e.ID_EXPEDIENTE = c.ID_EXPEDIENTE
+			WHERE c.ID_MEDICO = @ID_MEDICO;
+		RETURN ISNULL(@Total, 0);
+	END;
+GO
+
+--para llamar, se manda id medico
+
+SELECT dbo.Funcion_TotalPacientesAtendidosxMedico(2)
