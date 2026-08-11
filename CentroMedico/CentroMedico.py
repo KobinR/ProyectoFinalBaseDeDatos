@@ -2829,7 +2829,7 @@ class VentanaInventario(tk.Toplevel):
  
         self._limpiar_formulario()
         self.cargar_inventario()
- 
+
 # ==========================================================
 # AUDITORIA (SOLO LECTURA)
 # ==========================================================
@@ -2863,13 +2863,15 @@ class VentanaAuditoria(tk.Toplevel):
         ttk.Button(frame, text="Mostrar todos", command=self._mostrar_todos).pack(side="left")
  
     def _construir_tabla(self):
-        columnas = ("ID Auditoria", "Usuario", "Nombre", "Ap. Primero", "Tabla Afectada",
-                    "Registro Afectado", "Accion", "Fecha", "Hora", "IP Equipo")
- 
+        columnas = ("ID Auditoria", "Usuario", "Usuario SQL", "Nombre", "Ap. Primero",
+                    "Tabla Afectada", "Registro Afectado", "Accion", "Fecha", "Hora", "IP Equipo")
+
         self.tabla = ttk.Treeview(self, columns=columnas, show="headings", height=18)
         for col in columnas:
             self.tabla.heading(col, text=col)
-            self.tabla.column(col, width=95, anchor="w")
+            self.tabla.column(col, width=90, anchor="w")
+        self.tabla.pack(fill="both", expand=True, padx=10, pady=10)
+        self.tabla.bind("<Double-1>", lambda e: self._ver_detalle())
  
         self.tabla.pack(fill="both", expand=True, padx=10, pady=10)
         # doble clic tambien abre el detalle, ademas del boton
@@ -2890,14 +2892,20 @@ class VentanaAuditoria(tk.Toplevel):
         except pyodbc.Error as e:
             messagebox.showerror("Error", f"No se pudo consultar AUDITORIA.\n\n{e}")
             return
- 
+
         self.tabla.delete(*self.tabla.get_children())
         self.detalle_por_item = {}
- 
+
         for fila in filas:
-            visibles = fila[0:9] + (fila[11],)  # todo menos valor_anterior/valor_nuevo
+            usuario = fila[1] if fila[1] is not None else "(fuera de la app)"
+            usuario_sql = fila[2] if fila[2] is not None else ""
+            nombre = fila[3] if fila[3] is not None else ""
+            apellido = fila[4] if fila[4] is not None else ""
+
+            visibles = (fila[0], usuario, usuario_sql, nombre, apellido,
+                        fila[5], fila[6], fila[7], fila[8], fila[9], fila[12])
             item_id = self.tabla.insert("", "end", values=visibles)
-            self.detalle_por_item[item_id] = (fila[9], fila[10])
+            self.detalle_por_item[item_id] = (fila[10], fila[11])
  
     def _mostrar_todos(self):
         self.entry_buscar.delete(0, "end")

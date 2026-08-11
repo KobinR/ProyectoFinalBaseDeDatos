@@ -1089,16 +1089,13 @@ def eliminar_inventario(conn: pyodbc.Connection, id_inventario: int) -> None:
 # AUDITORIA se llena sola via triggers
  
 COLUMNAS_AUDITORIA = [
-    "a.ID_AUDITORIA", "u.USUARIO", "per.NOMBRE", "per.PRIMER_APELLIDO",
+    "a.ID_AUDITORIA", "u.USUARIO", "a.USUARIO_SQL", "per.NOMBRE", "per.PRIMER_APELLIDO",
     "a.TABLA_AFECTADA", "a.REGISTRO_AFECTADO", "a.ACCION", "a.FECHA", "a.HORA",
     "a.VALOR_ANTERIOR", "a.VALOR_NUEVO", "a.IP_EQUIPO",
 ]
  
  
 def listar_auditoria(conn: pyodbc.Connection, filtro: str = ""):
-    """Devuelve los registros de auditoria con el nombre de usuario/
-    persona que hizo el cambio via JOIN, mas recientes primero.
-    Filtro opcional por tabla afectada, accion o nombre de usuario."""
     cursor = conn.cursor()
     if filtro:
         like = f"%{filtro}%"
@@ -1106,22 +1103,22 @@ def listar_auditoria(conn: pyodbc.Connection, filtro: str = ""):
             f"""
             SELECT {', '.join(COLUMNAS_AUDITORIA)}
             FROM AUDITORIA a
-            INNER JOIN USUARIO u ON u.ID_USUARIO = a.ID_USUARIO
-            INNER JOIN EMPLEADO emp ON emp.ID_EMPLEADO = u.ID_EMPLEADO
-            INNER JOIN PERSONA per ON per.ID_PERSONA = emp.ID_PERSONA
-            WHERE a.TABLA_AFECTADA LIKE ? OR a.ACCION LIKE ? OR u.USUARIO LIKE ?
+            LEFT JOIN USUARIO u ON u.ID_USUARIO = a.ID_USUARIO
+            LEFT JOIN EMPLEADO emp ON emp.ID_EMPLEADO = u.ID_EMPLEADO
+            LEFT JOIN PERSONA per ON per.ID_PERSONA = emp.ID_PERSONA
+            WHERE a.TABLA_AFECTADA LIKE ? OR a.ACCION LIKE ? OR u.USUARIO LIKE ? OR a.USUARIO_SQL LIKE ?
             ORDER BY a.FECHA DESC, a.HORA DESC
             """,
-            (like, like, like),
+            (like, like, like, like),
         )
     else:
         cursor.execute(
             f"""
             SELECT {', '.join(COLUMNAS_AUDITORIA)}
             FROM AUDITORIA a
-            INNER JOIN USUARIO u ON u.ID_USUARIO = a.ID_USUARIO
-            INNER JOIN EMPLEADO emp ON emp.ID_EMPLEADO = u.ID_EMPLEADO
-            INNER JOIN PERSONA per ON per.ID_PERSONA = emp.ID_PERSONA
+            LEFT JOIN USUARIO u ON u.ID_USUARIO = a.ID_USUARIO
+            LEFT JOIN EMPLEADO emp ON emp.ID_EMPLEADO = u.ID_EMPLEADO
+            LEFT JOIN PERSONA per ON per.ID_PERSONA = emp.ID_PERSONA
             ORDER BY a.FECHA DESC, a.HORA DESC
             """
         )

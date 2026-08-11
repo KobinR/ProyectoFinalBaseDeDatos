@@ -1,6 +1,8 @@
 	USE Centro_Medico
 	GO
 
+alter table AUDITORIA alter column ID_USUARIO int null
+alter table AUDITORIA add USUARIO_SQL varchar(100) null
 /*  CAST(SESSION_CONTEXT(N'ID_USUARIO') as int) es para el ID_Usuario de los trigger cuando tengamos lo de python */
 
  /* 1. tipo de tabla 'TVP'     permitir poner varias cosas en lo de valor nuevo/viejo pero con lo de python       drop type TipoAuditoria;*/ 
@@ -131,7 +133,7 @@ exec SP_PacientesPorSeguro @SeguroMedico = 'CCSS'
 
 /*------------------------------------------------*/
 
-create procedure SP_ContarConsultaPorPaciente /*Cantidad de consultas que tiene un paciente*/
+Create procedure SP_ContarConsultaPorPaciente /*Cantidad de consultas que tiene un paciente*/
     @Cedula varchar(20)
 as
 begin
@@ -239,7 +241,6 @@ Begin
 end;
 go
 
-<<<<<<< HEAD
 delete PERSONA where ID_PERSONA = 39
 
 /*---------------- Paciente ----------------*/
@@ -496,6 +497,43 @@ Begin
 end;
 go
 
+/*---------------- Expediente ----------------*/
+
+Create Trigger TR_Expediente_Insert on EXPEDIENTE after insert as
+Begin
+    Declare @Aud TipoAuditoria;
+    Declare @IdUsuarioSesion int = cast(Session_context(N'ID_USUARIO') as int)
+    Insert into @Aud (ID_USUARIO, USUARIO_SQL, TABLA_AFECTADA, REGISTRO_AFECTADO, ACCION, VALOR_ANTERIOR, VALOR_NUEVO)
+    Select @IdUsuarioSesion, case when @IdUsuarioSesion is null then CURRENT_USER else null end, 'EXPEDIENTE', i.ID_EXPEDIENTE, 'INSERT', NULL, (select i.* for json path, WITHOUT_ARRAY_WRAPPER)
+    From inserted i;
+    exec SP_RegistrarAuditoria @Registros = @Aud;
+end;
+go
+
+Create Trigger TR_Expediente_Update on EXPEDIENTE after update as
+begin
+    Declare @Aud TipoAuditoria;
+    Declare @IdUsuarioSesion int = cast(Session_context(N'ID_USUARIO') as int)
+    Insert into @Aud (ID_USUARIO, USUARIO_SQL, TABLA_AFECTADA, REGISTRO_AFECTADO, ACCION, VALOR_ANTERIOR, VALOR_NUEVO)
+    select @IdUsuarioSesion, case when @IdUsuarioSesion is null then CURRENT_USER else null end, 'EXPEDIENTE', i.ID_EXPEDIENTE, 'UPDATE', (select d.* for json path, WITHOUT_ARRAY_WRAPPER), (select i.* for json path, WITHOUT_ARRAY_WRAPPER)
+    From inserted i
+    Inner join deleted d on d.ID_EXPEDIENTE = i.ID_EXPEDIENTE;
+    Exec SP_RegistrarAuditoria @Registros = @Aud;
+end;
+go
+
+Create Trigger TR_Expediente_Delete on EXPEDIENTE after delete as
+Begin
+    Declare @Aud TipoAuditoria;
+    Declare @IdUsuarioSesion int = cast(Session_context(N'ID_USUARIO') as int)
+    Insert into @Aud (ID_USUARIO, USUARIO_SQL, TABLA_AFECTADA, REGISTRO_AFECTADO, ACCION, VALOR_ANTERIOR, VALOR_NUEVO)
+    select @IdUsuarioSesion, case when @IdUsuarioSesion is null then CURRENT_USER else null end, 'EXPEDIENTE', d.ID_EXPEDIENTE, 'DELETE', (select d.* for json path, WITHOUT_ARRAY_WRAPPER), NULL
+    from deleted d;
+    exec SP_RegistrarAuditoria @Registros = @Aud;
+end;
+go
+
+
 /*---------------- Usuario ----------------*/
 
 Create Trigger TR_Usuario_Insert on Usuario after insert as
@@ -577,13 +615,13 @@ select p.ID_PERSONA, p.CEDULA, p.NOMBRE, p.PRIMER_APELLIDO, p.SEGUNDO_APELLIDO,p
 
 from PERSONA p
 INNER JOIN PACIENTE pac on pac.ID_PERSONA = p.ID_PERSONA
-where p.ESTADO = 1
+where p.ESTADO = 1;
 
 select * from Vista_PacientesActivos
 
 /*------------------------------------------------*/
 
-Alter view Vista_RecetasPendientes as
+Create view Vista_RecetasPendientes as
 Select r.ID_RECETA, r.FECHA, r.ESTADO, p.NOMBRE + ' ' + p.PRIMER_APELLIDO  as Paciente, pm.NOMBRE + ' ' + pm.PRIMER_APELLIDO as Medico
     
 from RECETA r
@@ -594,13 +632,13 @@ inner join PERSONA p on p.ID_PERSONA = pac.ID_PERSONA
 inner join MEDICO m  on m.ID_MEDICO = c.ID_MEDICO
 inner join EMPLEADO emp on emp.ID_EMPLEADO = m.ID_EMPLEADO
 inner join PERSONA pm  on pm.ID_PERSONA   = emp.ID_PERSONA
-where r.ESTADO = 'PENDIENTE'
+where r.ESTADO = 'PENDIENTE';
 
 select * from Vista_RecetasPendientes
 
 /*------------------------------------------------*/
 
-Alter view Vista_ResumenInventario as
+Create view Vista_ResumenInventario as
 select m.ID_MEDICAMENTO, m.NOMBRE, m.PRESENTACION, SUM(inv.CANTIDAD) as StockTotal, MAX(inv.STOCK_MINIMO) as StockMinimoReferencia, case when SUM(inv.CANTIDAD) < MAX(inv.STOCK_MINIMO) then 'Bajo' else 'Normal' end as Estado   
 from MEDICAMENTO m
 inner join INVENTARIO inv on inv.ID_MEDICAMENTO = m.ID_MEDICAMENTO
@@ -610,7 +648,7 @@ Select * from Vista_ResumenInventario
 
 /*------------------------------------------------*/
 
-alter view Vista_HistorialConsultas as
+create view Vista_HistorialConsultas as
 select c.ID_CONSULTA, c.FECHA, c.MOTIVO, c.DIAGNOSTICO, c.TRATAMIENTO, c.OBSERVACIONES, p.CEDULA as CedulaPaciente, p.NOMBRE + ' ' + p.PRIMER_APELLIDO as Paciente, pm.NOMBRE + ' ' + pm.PRIMER_APELLIDO as Medico, m.ESPECIALIDAD
   
 from CONSULTA c
@@ -635,7 +673,7 @@ select * from Vista_EmpleadosActivos
 
 /*------------------------------------------------*/
 
-Alter view Vista_MedicamentosPorVencer as /*en los siguientes 90 dias*/
+Create view Vista_MedicamentosPorVencer as /*en los siguientes 90 dias*/
 select i.ID_INVENTARIO, m.NOMBRE, i.LOTE, i.FECHA_VENCIMIENTO, i.CANTIDAD, DATEDIFF(DAY, GETDATE(), i.FECHA_VENCIMIENTO) AS DiasParaVencer
 from INVENTARIO i
 inner join MEDICAMENTO m ON m.ID_MEDICAMENTO = i.ID_MEDICAMENTO
@@ -645,7 +683,7 @@ Select * from Vista_MedicamentosPorVencer
 
 /*-------------------------------------------------*/
 
-alter view Vista_DetalleRecetaCompleto as
+Create view Vista_DetalleRecetaCompleto as
 Select r.ID_RECETA, r.FECHA as FechaReceta, r.ESTADO as EstadoReceta, p.NOMBRE + ' ' + p.PRIMER_APELLIDO as Paciente, dr.ID_DETALLE, m.NOMBRE as Medicamento, dr.CANTIDAD, dr.DOSIS, dr.FRECUENCIA, dr.DURACION, dr.PRECIO_ASIGNADO
 
 from RECETA r
@@ -660,7 +698,7 @@ Select * from Vista_DetalleRecetaCompleto
 
 /*-------------------------------------------*/
 
-alter View Vista_AuditoriaLegible as
+Create View Vista_AuditoriaLegible as
 select a.ID_AUDITORIA, u.USUARIO as UsuarioResponsable, a.TABLA_AFECTADA, a.REGISTRO_AFECTADO, a.ACCION, a.FECHA, a.HORA, a.IP_EQUIPO, a.VALOR_ANTERIOR, a.VALOR_NUEVO
 from AUDITORIA a
 inner join USUARIO u on u.ID_USUARIO = a.ID_USUARIO
@@ -687,8 +725,9 @@ inner join PERSONA p on p.ID_PERSONA = pac.ID_PERSONA
 where pac.SEGURO_MEDICO is null or pac.SEGURO_MEDICO = 'Ninguno'
 
 select * from Vista_PacientesSinSeguro
-=======
-delete PERSONA where ID_PERSONA = 34
+
+/*=======
+delete PERSONA where ID_PERSONA = 34*/
 
 
 
@@ -900,4 +939,4 @@ GO
 
 --para llamar, se manda id medico
 
-SELECT dbo.Funcion_TotalPacientesAtendidosxMedico(2)
+SELECT dbo.Funcion_TotalPacientesAtendidosxMedico(2) as [Pacientes Atendidos]
